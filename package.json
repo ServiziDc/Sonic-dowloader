@@ -1,0 +1,41 @@
+{
+  "name": "sonic-downloader",
+  "version": "3.30.3",
+  "description": "SonicDownloader - YouTube Playlist Ripper",
+  "main": "main.js",
+  "author": "DJ SIMOX",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --publish never"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.sonicdownloader.app",
+    "productName": "SonicDownloader",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "SonicDownloader-Setup-${version}.exe"
+    },
+    "extraResources": [
+      { "from": "tools/", "to": "tools/", "filter": ["**/*"] }
+    ],
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-dlmgr.js",
+      "index.html",
+      "download-manager.html",
+      "icon.ico"
+    ]
+  }
+}
