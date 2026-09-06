@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>SonicDownloader — Download in corso</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f4f5f7;
+    color: #1a1a2e;
+    height: 100vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  #header {
+    background: #fff; border-bottom: 1px solid #e2e4e9;
+    padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0;
+  }
+  #header .logo { width: 28px; height: 28px; border-radius: 50%; background: #e63946; display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0; }
+  #header .title { font-weight: 700; font-size: 14px; }
+  #header .sub { font-size: 11px; color: #8a8f9c; }
+  #headerProg { flex: 1; }
+  #headerProgBar { height: 6px; background: #e8eaf0; border-radius: 99px; overflow: hidden; }
+  #headerProgFill { height: 100%; width: 0%; background: linear-gradient(90deg,#e63946,#ff6b7a); transition: width .3s; }
+  #headerProgText { font-size: 11px; color: #6b7080; margin-top: 3px; text-align: right; }
+  #stopBtn {
+    background: #fff; border: 1px solid #e2e4e9; border-radius: 7px;
+    padding: 7px 14px; font-size: 12px; font-weight: 600; color: #d32f3c;
+    cursor: pointer; flex-shrink: 0;
+  }
+  #stopBtn:hover { background: #fdeceb; }
+
+  #list { flex: 1; overflow-y: auto; background: #f4f5f7; }
+  .item {
+    display: flex; align-items: center; gap: 12px;
+    background: #fff; margin: 8px 12px; border-radius: 10px;
+    padding: 10px 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    border: 1px solid #eceef2;
+  }
+  .item.done { opacity: .85; }
+  .item.error { border-color: #f5c2c7; background: #fff7f7; }
+  .thumb {
+    width: 64px; height: 64px; border-radius: 8px; flex-shrink: 0;
+    background: #1a1a2e center/cover no-repeat;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; overflow: hidden;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .thumb .playicon {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.25); color: #fff; font-size: 20px;
+  }
+  .thumb .spinner {
+    width: 20px; height: 20px; border: 3px solid rgba(255,255,255,.35);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .info { flex: 1; min-width: 0; }
+  .info .name { font-size: 13px; font-weight: 600; color: #1a1a2e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .info .meta { font-size: 11px; color: #8a8f9c; margin-top: 3px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .info .meta .sep { color: #d5d8de; }
+  .info .status-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+    background: #e8f7ee; color: #1a9a52;
+  }
+  .info .status-badge.working { background: #fff3e0; color: #e08a00; }
+  .info .status-badge.error { background: #fdeceb; color: #d32f3c; }
+  #emptyState {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; color: #b0b4bd; gap: 8px; font-size: 13px;
+  }
+  #footer {
+    background: #fff; border-top: 1px solid #e2e4e9; padding: 10px 16px;
+    font-size: 12px; color: #6b7080; display: flex; justify-content: space-between; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <div class="logo">⬇</div>
+  <div>
+    <div class="title">SonicDownloader</div>
+    <div class="sub" id="headerSub">In attesa...</div>
+  </div>
+  <div id="headerProg">
+    <div id="headerProgBar"><div id="headerProgFill"></div></div>
+    <div id="headerProgText">0 / 0</div>
+  </div>
+  <button id="stopBtn">⛔ Ferma</button>
+</div>
+
+<div id="list">
+  <div id="emptyState">🎵 In attesa del primo brano...</div>
+</div>
+
+<div id="footer">
+  <span id="footerLeft">0 completati</span>
+  <span id="footerRight">Cartella: —</span>
+</div>
+
+<script>
+const list = document.getElementById('list');
+const items = {}; // key: index -> { el, data }
+let total = 0;
+let doneCount = 0;
+let destFolder = '';
+
+function fmtBytes(b) {
+  if (!b) return '';
+  if (b < 1024*1024) return (b/1024).toFixed(0) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+function fmtDuration(sec) {
+  if (!sec) return '';
+  sec = Math.round(sec);
+  const m = Math.floor(sec/60), s = sec%60;
+  return m + ':' + String(s).padStart(2,'0');
+}
+
+function updateHeader() {
+  document.getElementById('headerSub').textContent =
+    doneCount >= total && total > 0 ? '✔ Completato' : ('Scarico ' + doneCount + ' di ' + total + '...');
+  const pct = total > 0 ? Math.round(doneCount/total*100) : 0;
+  document.getElementById('headerProgFill').style.width = pct + '%';
+  document.getElementById('headerProgText').textContent = doneCount + ' / ' + total;
+  document.getElementById('footerLeft').textContent = doneCount + ' completati su ' + total;
+  document.getElementById('footerRight').textContent = 'Cartella: ' + destFolder;
+}
+
+function ensureItem(idx, data) {
+  if (items[idx]) return items[idx];
+  document.getElementById('emptyState')?.remove();
+
+  const el = document.createElement('div');
+  el.className = 'item';
+  el.innerHTML =
+    '<div class="thumb" id="thumb-' + idx + '"><div class="playicon">🎵</div></div>' +
+    '<div class="info">' +
+      '<div class="name" id="name-' + idx + '">' + (data.title || 'In ricerca...') + '</div>' +
+      '<div class="meta" id="meta-' + idx + '">' +
+        '<span class="status-badge working" id="badge-' + idx + '">In corso</span>' +
+      '</div>' +
+    '</div>';
+  list.appendChild(el);
+  items[idx] = { el };
+  return items[idx];
+}
+
+window.dlmgr.onInit(({ total: t, destFolder: df }) => {
+  total = t; destFolder = df;
+  updateHeader();
+});
+
+window.dlmgr.onItemStart(({ index, title, thumb }) => {
+  const it = ensureItem(index, { title });
+  if (title) document.getElementById('name-' + index).textContent = title;
+  if (thumb) {
+    const th = document.getElementById('thumb-' + index);
+    if (th) th.innerHTML = '<img src="' + thumb + '"><div class="playicon"><div class="spinner"></div></div>';
+  }
+});
+
+window.dlmgr.onItemDone(({ index, title, thumb, duration, sizeBytes, format, source, error }) => {
+  const it = ensureItem(index, { title });
+  const el = it.el;
+  if (title) document.getElementById('name-' + index).textContent = title;
+  const th = document.getElementById('thumb-' + index);
+  if (th) th.innerHTML = thumb ? ('<img src="' + thumb + '">') : '<div class="playicon">🎵</div>';
+
+  const metaEl = document.getElementById('meta-' + index);
+  if (error) {
+    el.classList.add('error');
+    metaEl.innerHTML = '<span class="status-badge error">Errore</span><span>' + error + '</span>';
+  } else {
+    el.classList.add('done');
+    const parts = [];
+    if (duration) parts.push(fmtDuration(duration));
+    if (sizeBytes) parts.push(fmtBytes(sizeBytes));
+    if (format) parts.push(format.toUpperCase());
+    if (source) parts.push(source);
+    metaEl.innerHTML = '<span class="status-badge">✔ Fatto</span>' +
+      parts.map(p => '<span class="sep">·</span><span>' + p + '</span>').join('');
+    doneCount++;
+    updateHeader();
+  }
+});
+
+// Rete di sicurezza: se il tracking dettagliato per-brano non è mai scattato
+// (successo generale confermato comunque), forziamo il contatore a mostrare
+// il completamento reale invece di restare bloccato a "0 di X".
+window.dlmgr.onBulkComplete(({ total }) => {
+  if (doneCount < total) {
+    doneCount = total;
+    document.getElementById('emptyState')?.remove();
+    if (Object.keys(items).length === 0) {
+      const el = document.createElement('div');
+      el.className = 'item done';
+      el.innerHTML =
+        '<div class="thumb"><div class="playicon">✔</div></div>' +
+        '<div class="info">' +
+          '<div class="name">Download completato</div>' +
+          '<div class="meta"><span class="status-badge">✔ ' + total + ' brani completati</span></div>' +
+        '</div>';
+      list.appendChild(el);
+    }
+    updateHeader();
+  }
+});
+
+window.dlmgr.onAllDone(() => {
+  document.getElementById('headerSub').textContent = '✔ Download completato';
+  document.getElementById('stopBtn').textContent = '✕ Chiudi';
+});
+
+document.getElementById('stopBtn').addEventListener('click', () => {
+  window.dlmgr.stopOrClose();
+});
+</script>
+</body>
+</html>

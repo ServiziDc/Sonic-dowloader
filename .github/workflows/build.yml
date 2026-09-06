@@ -1,0 +1,54 @@
+name: Build e Pubblica SonicDownloader
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Scarica il codice
+        uses: actions/checkout@v4
+
+      - name: Prepara Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installa le dipendenze
+        run: npm install
+
+      - name: Crea la cartella tools se manca
+        run: if not exist "tools" mkdir tools
+        shell: cmd
+
+      - name: Inserisce le chiavi API vere (solo qui, non finiscono mai su GitHub)
+        shell: pwsh
+        run: |
+          $content = Get-Content -Path "main.js" -Raw
+          $content = $content.Replace('__YOUTUBE_API_KEY__', '${{ secrets.YOUTUBE_API_KEY }}')
+          $content = $content.Replace('__SPOTIFY_CLIENT_ID__', '${{ secrets.SPOTIFY_CLIENT_ID }}')
+          $content = $content.Replace('__SPOTIFY_CLIENT_SECRET__', '${{ secrets.SPOTIFY_CLIENT_SECRET }}')
+          $content = $content.Replace('__LASTFM_API_KEY__', '${{ secrets.LASTFM_API_KEY }}')
+          $content = $content.Replace('__JAMENDO_CLIENT_ID__', '${{ secrets.JAMENDO_CLIENT_ID }}')
+          $content = $content.Replace('__DISCOGS_TOKEN__', '${{ secrets.DISCOGS_TOKEN }}')
+          $content = $content.Replace('__GEMINI_API_KEY__', '${{ secrets.GEMINI_API_KEY }}')
+          Set-Content -Path "main.js" -Value $content -NoNewline
+
+      - name: Compila l'installer Windows
+        run: npm run build
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Pubblica la Release con l'installer allegato
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
