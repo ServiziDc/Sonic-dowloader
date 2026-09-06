@@ -1,0 +1,2391 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>SonicDownloader</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #060610;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── SCANLINES overlay ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,255,0.012) 2px, rgba(0,0,255,0.012) 4px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── HEADER ── */
+.header {
+  background: linear-gradient(135deg, #0d0d20 0%, #10102a 100%);
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 1px solid #e6394640;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e63946, #a78bfa, #e63946, transparent);
+  animation: headerLine 4s linear infinite;
+}
+@keyframes headerLine {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.header-logo {
+  width: 38px; height: 38px;
+  background: radial-gradient(circle, #e63946, #8b0000);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 0 20px #e6394660, 0 0 40px #e6394620;
+  flex-shrink: 0;
+  animation: logoPulse 3s ease-in-out infinite;
+}
+@keyframes logoPulse {
+  0%,100% { box-shadow: 0 0 20px #e6394660, 0 0 40px #e6394620; }
+  50% { box-shadow: 0 0 30px #e63946aa, 0 0 60px #e6394640; }
+}
+.header-title { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+.header-title span { color: #e63946; text-shadow: 0 0 20px #e6394680; }
+.header-sub { font-size: 9px; color: #fff; letter-spacing: 4px; margin-top: 1px; }
+.header-version {
+  font-size: 10px; font-weight: 700; color: #e63946;
+  border: 1px solid #e6394660; border-radius: 4px; padding: 2px 7px;
+  margin-left: auto;
+  box-shadow: 0 0 8px #e6394630;
+  text-shadow: 0 0 8px #e6394680;
+}
+.header-settings-btn {
+  background: #1a1a36; border: 1px solid #2a2a4a; border-radius: 7px;
+  color: #fff; font-size: 14px; width: 30px; height: 30px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; flex-shrink: 0;
+}
+.header-settings-btn:hover { background: #222244; color: #a78bfa; border-color: #a78bfa55; box-shadow: 0 0 10px #a78bfa30; }
+
+/* ── TOOLS BAR ── */
+.tools-bar {
+  background: #08081a;
+  padding: 5px 18px;
+  display: flex; gap: 8px; align-items: center;
+  border-bottom: 1px solid #1a1a30;
+  flex-shrink: 0;
+}
+.tool-badge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 99px; background: #10101f;
+}
+.tool-badge.ok { color: #4ade80; border: 1px solid #4ade8040; }
+.tool-badge.ok .tool-dot { background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+.tool-badge.err { color: #f87171; border: 1px solid #f8717140; }
+.tool-badge.err .tool-dot { background: #f87171; }
+.tool-dot { width: 5px; height: 5px; border-radius: 50%; }
+.tools-label { margin-left: auto; font-size: 9px; color: #1e1e3a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 380px; }
+
+/* ── SETTINGS PANEL ── */
+.settings-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+.settings-overlay.open { display: flex; align-items: center; justify-content: center; }
+.settings-panel {
+  background: #0d0d20;
+  border: 1px solid #a78bfa40;
+  border-radius: 14px;
+  padding: 24px;
+  width: 480px;
+  max-width: 95vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 0 60px #a78bfa20, 0 20px 60px #00000080;
+  position: relative;
+}
+.settings-panel::before {
+  content: '';
+  position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+  background: linear-gradient(90deg, transparent, #a78bfa, transparent);
+}
+.settings-title {
+  font-size: 13px; font-weight: 700; color: #a78bfa;
+  text-transform: uppercase; letter-spacing: 2px;
+  margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+}
+.settings-close {
+  margin-left: auto; background: none; border: none; color: #fff;
+  font-size: 18px; cursor: pointer; padding: 0 4px; line-height: 1;
+}
+.settings-close:hover { color: #f87171; }
+.settings-section { margin-bottom: 18px; }
+.settings-label {
+  font-size: 10px; color: #fff; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.settings-row { display: flex; gap: 8px; align-items: center; }
+.settings-input {
+  flex: 1; background: #08081a; border: 1px solid #2a2a4a; border-radius: 7px;
+  color: #e0e0e0; padding: 8px 12px; font-size: 12px; outline: none;
+  font-family: monospace; letter-spacing: 0.5px;
+  transition: border-color 0.2s;
+}
+.settings-input:focus { border-color: #a78bfa; box-shadow: 0 0 0 2px #a78bfa20; }
+.settings-hint { font-size: 10px; color: #fff; margin-top: 5px; line-height: 1.5; }
+.settings-divider { height: 1px; background: #1a1a30; margin: 16px 0; }
+
+/* ── LOGIN STATUS CHIP ── */
+.login-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 99px;
+  font-size: 11px; font-weight: 700;
+  background: #0a180a; border: 1px solid #16a34a55; color: #4ade80;
+  margin-bottom: 8px;
+}
+.login-chip.disconnected { background: #180a0a; border-color: #e6394455; color: #fff; }
+.login-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade80; }
+.login-chip.disconnected .login-chip-dot { background: #555; box-shadow: none; }
+.login-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── MAIN ── */
+.main { flex: 1; overflow-y: auto; padding: 10px 18px; display: flex; flex-direction: column; gap: 9px; }
+
+/* ── CARDS ── */
+.card {
+  background: linear-gradient(135deg, #0e0e22 0%, #10102a 100%);
+  border: 1px solid #1e1e38;
+  border-radius: 10px; padding: 12px 15px 16px;
+  position: relative; overflow: hidden;
+}
+.card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, #a78bfa30, transparent);
+}
+.card-title {
+  font-size: 9px; font-weight: 700; color: #a78bfa;
+  text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.card-title-badge {
+  font-size: 9px; color: #4ade80; background: #0a1f0a;
+  border: 1px solid #4ade8030; border-radius: 99px;
+  padding: 1px 6px; font-weight: 700; letter-spacing: 1px;
+}
+
+/* ── INPUTS ── */
+.input-row { display: flex; gap: 8px; }
+input[type="text"] {
+  flex: 1; background: #08081a; border: 1px solid #1e1e38;
+  border-radius: 7px; color: #e0e0e0; padding: 8px 12px;
+  font-size: 12px; outline: none; transition: all 0.2s;
+}
+input[type="text"]:focus { border-color: #e63946; box-shadow: 0 0 0 2px #e6394615; }
+input[type="text"]::placeholder { color: #222; }
+
+/* ── BUTTONS ── */
+.btn {
+  padding: 7px 13px; border: none; border-radius: 7px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap; letter-spacing: 0.3px;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #e63946, #c1121f);
+  color: #fff;
+  box-shadow: 0 2px 12px #e6394640;
+}
+.btn-primary:hover:not(:disabled) { box-shadow: 0 2px 20px #e6394680; transform: translateY(-1px); }
+.btn-primary:disabled { background: #3a1a1e; color: #666; cursor: not-allowed; box-shadow: none; }
+.btn-secondary { background: #14142a; color: #fff; border: 1px solid #2a2a44; }
+.btn-secondary:hover:not(:disabled) { background: #1e1e3a; color: #fff; border-color: #3a3a5a; }
+.btn-secondary:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-success { background: #0a1f0a; color: #4ade80; border: 1px solid #16a34a55; }
+.btn-success:hover { background: #0d280d; box-shadow: 0 0 12px #4ade8030; }
+.btn-stop { background: #1f0a0a; color: #f87171; border: 1px solid #ef444455; }
+.btn-stop:hover { box-shadow: 0 0 12px #f8717130; }
+.btn-warn { background: #1a1200; color: #fbbf24; border: 1px solid #fbbf2430; font-size: 10px; }
+.btn-warn:hover { background: #231900; }
+.btn-purple { background: #1a0a3a; color: #a78bfa; border: 1px solid #a78bfa40; }
+.btn-purple:hover { background: #220d4a; box-shadow: 0 0 12px #a78bfa30; }
+
+/* ── URL TYPE LABEL ── */
+#urlTypeLabel {
+  font-size: 9px; color: #4ade80; font-weight: 700;
+  letter-spacing: 1.5px; background: #0a1f0a;
+  border: 1px solid #4ade8030; border-radius: 99px;
+  padding: 1px 7px;
+}
+
+/* ── PLAYLIST BOX ── */
+.pn-box {
+  display: none; margin-top: 8px; background: #08081a;
+  border: 1px solid #2a1a4a; border-radius: 7px;
+  padding: 7px 11px; align-items: center; gap: 8px;
+}
+.pn-box.visible { display: flex; }
+.pn-label { font-size: 10px; color: #fff; flex-shrink: 0; }
+.pn-value { font-size: 12px; font-weight: 700; color: #a78bfa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pn-count {
+  margin-left: auto; font-size: 10px; font-weight: 700; color: #fbbf24;
+  background: #1a1400; border: 1px solid #fbbf2440; border-radius: 5px; padding: 2px 7px; flex-shrink: 0;
+}
+
+/* ── BANNERS ── */
+.banner {
+  display: none; margin-top: 8px; border-radius: 7px;
+  padding: 8px 12px; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+.banner.single { background: #08180a; border: 1px solid #16a34a40; }
+.banner.mixed { background: #180f00; border: 1px solid #fbbf2440; flex-direction: column; align-items: flex-start; }
+.banner-label { font-size: 11px; font-weight: 700; }
+.banner.single .banner-label { color: #4ade80; }
+.banner.mixed .banner-label { color: #fbbf24; }
+
+/* ── FOLDER + FORMAT ── */
+.folder-row { display: flex; gap: 8px; margin-bottom: 9px; }
+.folder-path {
+  flex: 1; background: #08081a; border: 1px solid #1e1e38;
+  border-radius: 7px; padding: 7px 11px; font-size: 11px;
+  color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: monospace;
+}
+.folder-path.set { color: #4ade80; border-color: #16a34a30; }
+.format-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+.fmt {
+  padding: 5px 14px; border-radius: 6px; border: 1px solid #1e1e38;
+  background: #08081a; color: #fff; font-size: 11px; font-weight: 800;
+  cursor: pointer; transition: all 0.15s; letter-spacing: 1.5px;
+}
+.fmt:hover { border-color: #a78bfa60; color: #a78bfa; }
+.fmt.active { border-color: #e63946; color: #e63946; background: #1a060a; box-shadow: 0 0 10px #e6394620; }
+
+/* ── NOW PLAYING ── */
+.now-playing {
+  display: none; background: #08081a;
+  border: 1px solid #2a1a4a; border-radius: 9px;
+  padding: 9px 12px; align-items: center; gap: 12px; margin-bottom: 9px;
+  position: relative; overflow: hidden;
+}
+.now-playing::before {
+  content: '';
+  position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, #a78bfa60, transparent);
+  animation: npLine 2s ease-in-out infinite;
+}
+@keyframes npLine { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+.now-playing.visible { display: flex; }
+.np-thumb { width: 68px; height: 50px; border-radius: 5px; object-fit: cover; background: #1a1a3a; flex-shrink: 0; border: 1px solid #2a2a4a; }
+.np-thumb-ph { width: 68px; height: 50px; border-radius: 5px; background: #1a1a3a; flex-shrink: 0; border: 1px solid #2a2a4a; display: flex; align-items: center; justify-content: center; font-size: 20px; overflow: hidden; }
+
+/* ── Ingranaggi 3D animati mentre scarica ── */
+.gear3d-scene {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  perspective: 300px;
+  position: relative;
+}
+.gear3d {
+  width: 32px; height: 32px;
+  transform-style: preserve-3d;
+  animation: gear3d-spin 2.2s linear infinite;
+  filter: drop-shadow(0 2px 4px #00000060);
+}
+.gear3d-small {
+  position: absolute;
+  width: 20px; height: 20px;
+  top: 2px; right: -2px;
+  animation: gear3d-spin-reverse 1.6s linear infinite;
+}
+@keyframes gear3d-spin {
+  0%   { transform: rotateY(0deg) rotateX(18deg) rotateZ(0deg); }
+  100% { transform: rotateY(360deg) rotateX(18deg) rotateZ(360deg); }
+}
+@keyframes gear3d-spin-reverse {
+  0%   { transform: rotateY(0deg) rotateX(-14deg) rotateZ(0deg); }
+  100% { transform: rotateY(-360deg) rotateX(-14deg) rotateZ(-360deg); }
+}
+.np-info { flex: 1; overflow: hidden; }
+.np-label { font-size: 9px; color: #fff; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 2px; }
+.np-title { font-size: 12px; font-weight: 700; color: #e0e0e0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-index { font-size: 9px; color: #444; margin-top: 2px; }
+.np-pulse { width: 7px; height: 7px; border-radius: 50%; background: #e63946; flex-shrink: 0; animation: pulse 1s infinite; box-shadow: 0 0 8px #e63946; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.6)} }
+
+/* ── PROGRESS ── */
+.prog-section { display: none; margin-bottom: 8px; }
+.prog-section.visible { display: block; }
+.prog-top { display: flex; justify-content: space-between; font-size: 10px; color: #fff; margin-bottom: 4px; }
+.prog-pct { color: #e63946; font-weight: 700; }
+.prog-wrap { background: #08081a; border: 1px solid #1a1a30; border-radius: 99px; height: 5px; overflow: hidden; margin-bottom: 3px; }
+.prog-bar { height: 100%; border-radius: 99px; width: 0%; background: linear-gradient(90deg, #e63946, #a78bfa); transition: width 0.5s; box-shadow: 0 0 6px #e6394660; }
+.prog-wrap2 { background: #08081a; border-radius: 99px; height: 2px; overflow: hidden; }
+.prog-bar2 { height: 100%; border-radius: 99px; width: 0%; background: #a78bfa; transition: width 0.3s; }
+
+/* ── LOG ── */
+.log-box {
+  background: #050510; border: 1px solid #141428;
+  border-radius: 7px; height: 95px; overflow-y: auto;
+  padding: 7px 10px; font-family: 'Consolas', monospace;
+  font-size: 10px; line-height: 1.7;
+}
+.l { color: #fff; }
+.l.info { color: #60a5fa; }
+.l.ok { color: #4ade80; }
+.l.warn { color: #fbbf24; }
+.l.err { color: #f87171; }
+.l.dl { color: #c4b5fd; }
+.l.skip { color: #4ade8020; }
+
+/* ── ACTIONS ── */
+.action-row { display: flex; gap: 6px; align-items: center; margin-top: 9px; flex-wrap: wrap; }
+.status-text { flex: 1; font-size: 10px; color: #fff; min-width: 80px; font-family: monospace; }
+.status-text.running { color: #fbbf24; }
+.status-text.done { color: #4ade80; }
+.status-text.err { color: #f87171; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a4a; border-radius: 2px; }
+
+/* ── GLOW LINES decorative ── */
+.glow-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #e6394620, transparent);
+  margin: 2px 0;
+}
+/* ── Browser YouTube Music ── */
+.browser-view {
+  display: none;
+  position: fixed; inset: 0; z-index: 5000;
+  background: #0d0d1a;
+  flex-direction: column;
+}
+.browser-view.open { display: flex; }
+.browser-toolbar {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 10px;
+  background: #14142a;
+  border-bottom: 1px solid #2a2a4a;
+  flex-shrink: 0;
+}
+.bv-btn {
+  width: 34px; height: 34px;
+  border: 1px solid #2a2a4a; background: #1a1a32;
+  color: #e0e0e0; border-radius: 8px; cursor: pointer;
+  font-size: 16px; line-height: 1; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.bv-btn:hover { background: #24244a; border-color: #a78bfa; }
+.bv-btn:disabled { opacity: .35; cursor: default; }
+.bv-close { border-color: #e6394455; }
+.bv-close:hover { background: #e63946; border-color: #e63946; }
+.bv-url {
+  flex: 1; height: 34px;
+  background: #0a0a18; border: 1px solid #2a2a4a; border-radius: 8px;
+  color: #dfe3ea; padding: 0 12px; font-size: 12px; outline: none;
+}
+.bv-url:focus { border-color: #a78bfa; }
+.bv-format {
+  height: 34px; flex-shrink: 0;
+  background: #1a1a32; border: 1px solid #2a2a4a; border-radius: 8px;
+  color: #e0e0e0; padding: 0 8px; font-size: 12px; cursor: pointer; outline: none;
+}
+.bv-format:focus { border-color: #a78bfa; }
+.browser-tabs {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px; background: #11112180;
+  border-bottom: 1px solid #2a2a4a; flex-shrink: 0;
+}
+.bv-tab {
+  border: 1px solid #2a2a4a; background: #16162e;
+  color: #cfd3e0; border-radius: 999px; cursor: pointer;
+  font-size: 11px; font-weight: 600; padding: 5px 13px;
+  transition: all .15s; flex-shrink: 0;
+}
+.bv-tab:hover { background: #24244a; border-color: #a78bfa; color: #fff; }
+.bv-status { font-size: 10px; color: #fff; margin-left: 8px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bv-download {
+  height: 34px; flex-shrink: 0;
+  background: linear-gradient(135deg,#e63946,#a8324a);
+  color: #fff; border: none; border-radius: 8px;
+  padding: 0 16px; font-size: 12px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 2px 10px #e6394640; transition: all .15s;
+}
+.bv-download:hover:not(:disabled) { filter: brightness(1.12); }
+.bv-download:disabled {
+  background: #2a2a3a; color: #666; box-shadow: none; cursor: default;
+}
+.bv-hint {
+  font-size: 11px; color: #b9a8e8; background: #1a1230;
+  padding: 6px 14px; border-bottom: 1px solid #2a2a4a; flex-shrink: 0;
+}
+#bvWebview { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; display: inline-flex; border: none; background: #0f0f0f; }
+
+/* VISTA DEDICATA: CERCA DA LISTA TITOLI */
+.lv-view {
+  display: none;
+  position: fixed; inset: 0; z-index: 5000;
+  background: #0d0d1a;
+  flex-direction: column;
+}
+.lv-view.open { display: flex; }
+.lv-main {
+  flex: 1 1 auto; min-height: 0;
+  display: flex; gap: 14px;
+  padding: 14px; overflow: hidden;
+}
+.lv-left {
+  width: 340px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  overflow-y: auto; min-height: 0; padding-right: 4px;
+}
+.lv-right {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.lv-textarea {
+  flex: 1; min-height: 0;
+  width: 100%; resize: none;
+  background: #0a0a18; border: 1px solid #2a2a4a; border-radius: 10px;
+  color: #e8e8e8; padding: 12px; font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px; outline: none; box-sizing: border-box;
+}
+.lv-textarea:focus { border-color: #a78bfa; }
+.lv-results-box {
+  flex: 1; min-height: 0; overflow-y: auto;
+  background: #0a0a18; border: 1px solid #2a2a4a; border-radius: 10px;
+  padding: 6px;
+}
+.lv-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 8px;
+  border-bottom: 1px solid #1e1e3a;
+  transition: background .12s;
+}
+.lv-item:hover { background: #14142a; }
+.lv-item:last-child { border-bottom: none; }
+.lv-item .lv-thumb { width: 64px; height: 36px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #1a1a32; }
+.lv-item .lv-thumb-ph { width: 64px; height: 36px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; background: #1a1a32; border-radius: 6px; }
+.lv-item .lv-info { flex: 1; min-width: 0; }
+.lv-item .lv-query { font-size: 10px; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-item .lv-title { font-size: 13px; color: #e8e8e8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-item .lv-source { font-size: 15px; flex-shrink: 0; width: 20px; text-align: center; }
+.lv-item .lv-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.lv-action-btn {
+  width: 30px; height: 30px; border-radius: 7px; border: 1px solid #2a2a4a;
+  background: #16162e; color: #cfd3e0; cursor: pointer; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; transition: all .12s;
+}
+.lv-action-btn:hover { background: #24244a; border-color: #a78bfa; }
+.lv-action-btn.lv-play:hover { border-color: #4ade80; color: #4ade80; }
+.lv-action-btn.lv-del:hover { border-color: #f87171; color: #f87171; background: #2a0e0e; }
+.lv-item.lv-removed { opacity: .35; }
+.lv-item.lv-removed .lv-actions .lv-play { display: none; }
+
+.lv-player-bar {
+  display: none;
+  align-items: center; gap: 12px;
+  padding: 10px 16px;
+  background: #14142a; border-top: 1px solid #2a2a4a;
+  flex-shrink: 0;
+}
+.lv-player-bar.active { display: flex; }
+.lv-player-thumb { width: 320px; height: 120px; border-radius: 8px; background: #1a1a32; flex-shrink: 0; overflow: hidden; display:flex;align-items:center;justify-content:center;font-size:20px; }
+.lv-player-thumb iframe { width: 320px; height: 120px; border: none; display: block; }
+.lv-player-info { flex: 1; min-width: 0; }
+.lv-player-title { font-size: 13px; font-weight: 700; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-player-sub { font-size: 11px; color: #a78bfa; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- VISTA LINK MULTIPLI -->
+<div class="lv-view" id="multiUrlView">
+  <div class="browser-toolbar">
+    <div style="font-weight:800;font-size:14px;color:#fff;flex-shrink:0;">🔗 Link multipli</div>
+    <span class="bv-status" id="muStatus" style="flex:1;"></span>
+    <button class="bv-download" id="muDownloadBtn">⬇ Scarica tutti</button>
+    <button class="bv-btn bv-close" id="muClose" title="Chiudi">✕</button>
+  </div>
+  <div class="lv-main">
+    <div class="lv-left" style="width:100%;">
+      <div style="font-size:11px;color:#fff;">Incolla più link YouTube (singoli o playlist), SoundCloud o Spotify, uno per riga — vengono scaricati tutti in sequenza, uno dopo l'altro.</div>
+      <textarea id="multiUrlInput" class="lv-textarea" placeholder="https://youtu.be/xxxxxxxxxxx&#10;https://www.youtube.com/playlist?list=xxxxxxxx&#10;https://soundcloud.com/artista/brano&#10;https://open.spotify.com/track/xxxxxxxx&#10;..."></textarea>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" id="btnClearMultiUrl">🗑 Pulisci</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VISTA GENERA SET -->
+<div class="lv-view" id="genSetView">
+  <div class="browser-toolbar">
+    <div style="font-weight:800;font-size:14px;color:#fff;flex-shrink:0;">🎛 Genera Set</div>
+    <span class="bv-status" id="gsStatus" style="flex:1;"></span>
+    <button class="bv-btn bv-close" id="gsClose" title="Chiudi">✕</button>
+  </div>
+  <div class="lv-main">
+    <div class="lv-left" style="width:100%;gap:10px;">
+      <div style="font-size:11px;color:#fff;">Compila almeno artisti o generi. Con solo il genere, il programma scopre da solo i DJ più ricorrenti. Verifica la data reale di pubblicazione (non solo quella scritta nel titolo) per rispettare l'anno scelto. Ti propone una scaletta — puoi rimuovere/ascoltare le tracce prima di scaricare.</div>
+
+      <label style="font-size:11px;color:#a78bfa;font-weight:700;">Artisti (separati da virgola)</label>
+      <input type="text" id="gsArtisti" placeholder="Hardwell, Armin van Buuren, Charlotte de Witte" style="width:100%;background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:9px 12px;font-size:13px;box-sizing:border-box;">
+
+      <label style="font-size:11px;color:#a78bfa;font-weight:700;">Generi (separati da virgola)</label>
+      <input type="text" id="gsGeneri" placeholder="Hard Techno, Industrial, Mainstage" style="width:100%;background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:9px 12px;font-size:13px;box-sizing:border-box;">
+
+      <div style="display:flex;gap:10px;">
+        <div style="flex:1;">
+          <label style="font-size:11px;color:#a78bfa;font-weight:700;">Anno da</label>
+          <input type="number" id="gsAnnoDa" value="2024" style="width:100%;background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:9px 12px;font-size:13px;box-sizing:border-box;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:11px;color:#a78bfa;font-weight:700;">Anno a</label>
+          <input type="number" id="gsAnnoA" value="2026" style="width:100%;background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:9px 12px;font-size:13px;box-sizing:border-box;">
+        </div>
+      </div>
+
+      <label style="font-size:11px;color:#a78bfa;font-weight:700;">Obiettivo del set</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="gsTargetType" style="background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:9px 10px;font-size:13px;">
+          <option value="count">Numero di brani</option>
+          <option value="duration">Durata (minuti)</option>
+        </select>
+        <input type="number" id="gsTargetValue" value="15" style="flex:1;background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:9px 12px;font-size:13px;box-sizing:border-box;">
+      </div>
+
+      <label style="font-size:11px;color:#a78bfa;font-weight:700;">Sorgenti di ricerca</label>
+      <div style="display:flex;gap:14px;font-size:12px;color:#fff;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="gsUseYoutube" checked style="accent-color:#e63946;"> ▶ YouTube</label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="gsUseSoundcloud" checked style="accent-color:#ff7700;"> 🟠 SoundCloud</label>
+      </div>
+      <div style="font-size:10px;color:#a78bfa;margin-top:2px;">Fonti extra per nomi precisi/download gratis (deseleziona quelle che non vuoi usare):</div>
+      <div style="display:flex;gap:12px;font-size:12px;color:#fff;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseDeezer" checked style="accent-color:#a238ff;"> 🎧 Deezer</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseSpotify" checked style="accent-color:#1db954;"> 🟢 Spotify</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseLastfm" checked style="accent-color:#d51007;"> 🎧 Last.fm</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseAppleMusic" checked style="accent-color:#fa233b;"> 🍎 Apple Music</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseMusicbrainz" checked style="accent-color:#ba478f;"> 📀 MusicBrainz</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseDiscogs" checked style="accent-color:#333;"> 💿 Discogs</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseJamendo" checked style="accent-color:#f6a316;"> 🎵 Jamendo</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseAudius" checked style="accent-color:#7e1bcc;"> 🎧 Audius</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="gsUseInternetArchive" checked style="accent-color:#666;"> 📼 Internet Archive</label>
+      </div>
+
+      <label style="font-size:11px;color:#a78bfa;font-weight:700;">Durata massima per brano, in minuti (opzionale)</label>
+      <input type="number" id="gsMaxDurataBrano" placeholder="es. 6 — lascia vuoto per nessun limite specifico" style="width:100%;background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:9px 12px;font-size:13px;box-sizing:border-box;">
+
+      <button class="btn btn-primary" id="btnGenerateSet" style="width:100%;margin-top:6px;">🎛 Genera scaletta</button>
+    </div>
+  </div>
+</div>
+
+<!-- VISTA CERCA DA LISTA TITOLI -->
+<div class="lv-view" id="listView">
+  <div class="browser-toolbar">
+    <div style="font-weight:800;font-size:14px;color:#fff;flex-shrink:0;">📝 Cerca da lista titoli</div>
+    <span class="bv-status" id="lvStatus" style="flex:1;"></span>
+    <button class="bv-download" id="lvDownloadBtn" disabled>⬇ Scarica trovati</button>
+    <button class="bv-btn bv-close" id="lvClose" title="Chiudi">✕</button>
+  </div>
+  <div class="lv-main">
+    <div class="lv-left">
+      <div style="font-size:11px;color:#fff;">Incolla i titoli, uno per riga. Cerca in automatico: ▶ YouTube → 🟠 SoundCloud → 🟢 Spotify</div>
+      <textarea id="listInput" class="lv-textarea" placeholder="02:40 - 04:35 – Headhunterz - Reawaken&#10;Da Tweekaz - Empire&#10;..."></textarea>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" id="btnSearchList" style="flex:1;">🔍 Cerca</button>
+        <button class="btn btn-secondary" id="btnClearList">🗑 Pulisci</button>
+      </div>
+    </div>
+    <div class="lv-right">
+      <div style="font-size:11px;color:#fff;display:flex;justify-content:space-between;">
+        <span>Risultati — clicca ▶ per ascoltare qui, oppure elimina quello che non ti interessa</span>
+        <span id="lvCount" style="color:#a78bfa;font-weight:700;"></span>
+      </div>
+      <div class="lv-results-box" id="listResults"></div>
+    </div>
+  </div>
+
+  <!-- MINI PLAYER -->
+  <div class="lv-player-bar" id="lvPlayerBar">
+    <div class="lv-player-thumb" id="lvPlayerThumb"></div>
+    <div class="lv-player-info">
+      <div class="lv-player-title" id="lvPlayerTitle">—</div>
+      <div class="lv-player-sub" id="lvPlayerSub"></div>
+    </div>
+    <button class="lv-action-btn" id="lvPlayerOpenBrowser" title="Se non senti nulla: apri nel browser">🌐</button>
+    <button class="lv-action-btn" id="lvPlayerStop" title="Ferma">⏹</button>
+  </div>
+</div>
+
+<!-- BROWSER YOUTUBE MUSIC -->
+<div class="browser-view" id="browserView">
+  <div class="browser-toolbar">
+    <button class="bv-btn" id="bvBack" title="Indietro">←</button>
+    <button class="bv-btn" id="bvFwd" title="Avanti">→</button>
+    <button class="bv-btn" id="bvReload" title="Ricarica">⟳</button>
+    <input type="text" id="bvUrl" class="bv-url" placeholder="Scrivi un indirizzo o cerca su YouTube, poi INVIO..."/>
+    <select id="bvFormat" class="bv-format" title="Formato audio">
+      <option value="wav">WAV</option>
+      <option value="mp3">MP3</option>
+      <option value="flac">FLAC</option>
+      <option value="aac">AAC</option>
+      <option value="opus">OPUS</option>
+      <option value="m4a">M4A</option>
+    </select>
+    <button class="bv-download" id="bvDownload" disabled title="Apri qualcosa da scaricare">⬇ Scarica</button>
+    <button class="bv-download" id="bvExtract1001" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);display:none;" title="Estrai la tracklist dalla pagina 1001tracklists che stai guardando">🎛 Estrai tracklist</button>
+    <button class="bv-btn bv-close" id="bvClose" title="Torna alla schermata download">✕</button>
+  </div>
+  <div class="browser-tabs">
+    <button class="bv-tab" data-go="https://www.youtube.com/">▶ YouTube</button>
+    <button class="bv-tab" data-go="https://music.youtube.com/">🎵 YT Music</button>
+    <button class="bv-tab" data-go="https://soundcloud.com/discover">🟠 SoundCloud</button>
+    <button class="bv-tab" data-go="https://open.spotify.com/">🟢 Spotify</button>
+    <button class="bv-tab" data-go="https://www.1001tracklists.com/">🎛 1001Tracklists</button>
+    <button class="bv-tab" data-go="https://www.mixesdb.com/w/Main_Page">🎵 MixesDB</button>
+    <span class="bv-status" id="bvStatus">Naviga e clicca «Scarica» quando sei su un brano, una playlist o un album.</span>
+  </div>
+  <webview id="bvWebview" partition="persist:yt-login" allowpopups></webview>
+</div>
+
+<!-- ── SETTINGS OVERLAY ── -->
+<div class="settings-overlay" id="toolsOverlay" style="display:none;">
+  <div class="settings-panel" style="max-width:420px;">
+    <div class="settings-title" style="margin-bottom:14px;">⬇ Preparazione strumenti</div>
+    <div style="font-size:12px;color:#fff;margin-bottom:14px;">Prima esecuzione: scarico yt-dlp, ffmpeg e deno (una volta sola, poi restano salvati).</div>
+    <div id="toolsProgressList" style="display:flex;flex-direction:column;gap:10px;"></div>
+  </div>
+</div>
+
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-panel">
+    <div class="settings-title">
+      ⚙ Impostazioni
+      <button class="settings-close" id="btnCloseSettings">✕</button>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">🔑 Chiave API YouTube</div>
+      <div class="settings-row">
+        <input type="password" class="settings-input" id="apiKeyInput" placeholder="AIza..."/>
+        <button class="btn btn-purple" id="btnShowKey" style="padding:7px 10px;">👁</button>
+        <button class="btn btn-purple" id="btnSaveKey">Salva</button>
+        <span style="font-size:11px;color:#4ade80;" id="apiKeyStatus"></span>
+      </div>
+      <div class="settings-hint">
+        Necessaria per scaricare playlist oltre 200 brani. È già configurata una chiave predefinita.<br>
+        Ottieni la tua su <span style="color:#a78bfa">console.cloud.google.com</span> → YouTube Data API v3.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">🟢 Spotify (per "Genera Set" — solo ricerca, non download)</div>
+      <div class="settings-row">
+        <input type="text" class="settings-input" id="spotifyClientIdInput" placeholder="Client ID"/>
+      </div>
+      <div class="settings-row" style="margin-top:6px;">
+        <input type="password" class="settings-input" id="spotifyClientSecretInput" placeholder="Client Secret"/>
+        <button class="btn btn-purple" id="btnSaveSpotifyKeys">Salva</button>
+        <span style="font-size:11px;color:#4ade80;" id="spotifyKeysStatus"></span>
+      </div>
+      <div class="settings-hint">
+        Usato solo per trovare i nomi esatti dei brani (artista/titolo/data uscita reale) in "Genera Set" — il download avviene sempre da YouTube/SoundCloud.<br>
+        Registrati gratis su <span style="color:#a78bfa">developer.spotify.com/dashboard</span> → crea un'app → copia Client ID e Client Secret.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">🎧 Last.fm (scoperta precisa per genere in "Genera Set")</div>
+      <div class="settings-row">
+        <input type="password" class="settings-input" id="lastfmKeyInput" placeholder="API Key"/>
+        <button class="btn btn-purple" id="btnSaveLastfmKey">Salva</button>
+        <span style="font-size:11px;color:#4ade80;" id="lastfmKeyStatus"></span>
+      </div>
+      <div class="settings-hint">
+        Trova i brani più rilevanti per un genere/tag usando dati reali della community — molto preciso anche per generi di nicchia (techno, hard techno, hardcore, hardstyle).<br>
+        Registrati gratis su <span style="color:#a78bfa">last.fm/api/account/create</span>.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">🎵 Jamendo (musica gratis/Creative Commons, scaricabile diretta)</div>
+      <div class="settings-row">
+        <input type="password" class="settings-input" id="jamendoIdInput" placeholder="Client ID"/>
+        <button class="btn btn-purple" id="btnSaveJamendoId">Salva</button>
+        <span style="font-size:11px;color:#4ade80;" id="jamendoIdStatus"></span>
+      </div>
+      <div class="settings-hint">
+        Fonte di download EXTRA (oltre a YouTube/SoundCloud): musica con licenza Creative Commons, scaricabile direttamente senza restrizioni.<br>
+        Registrati gratis su <span style="color:#a78bfa">devportal.jamendo.com</span>.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">💿 Discogs (metadati precisi, ottimo per techno/hardcore/hardstyle)</div>
+      <div class="settings-row">
+        <input type="password" class="settings-input" id="discogsTokenInput" placeholder="Personal Access Token"/>
+        <button class="btn btn-purple" id="btnSaveDiscogsToken">Salva</button>
+        <span style="font-size:11px;color:#4ade80;" id="discogsTokenStatus"></span>
+      </div>
+      <div class="settings-hint">
+        Usato solo per trovare i nomi esatti dei brani in "Genera Set" — il download avviene sempre da YouTube/SoundCloud.<br>
+        Registrati gratis su <span style="color:#a78bfa">discogs.com/settings/developers</span> → genera un "Personal Access Token".
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">🤖 Gemini AI (controllo finale intelligente di pertinenza)</div>
+      <div class="settings-row">
+        <input type="password" class="settings-input" id="geminiKeyInput" placeholder="AIza..."/>
+        <button class="btn btn-purple" id="btnSaveGeminiKey">Salva</button>
+        <span style="font-size:11px;color:#4ade80;" id="geminiKeyStatus"></span>
+      </div>
+      <div class="settings-hint">
+        Dopo che le regole automatiche hanno già filtrato i candidati in "Genera Set", Gemini fa un ultimo controllo semantico intelligente prima di darti la scaletta finale.<br>
+        Gratis (1500 richieste/giorno) — registrati su <span style="color:#a78bfa">aistudio.google.com</span> → "Get API key".
+      </div>
+    </div>
+
+    <div class="settings-divider"></div>
+
+    <div class="settings-section">
+      <div class="settings-label">🍪 Login YouTube</div>
+      <div id="loginChipWrap">
+        <div class="login-chip disconnected" id="loginChip">
+          <div class="login-chip-dot"></div>
+          <span id="loginChipText">Non connesso</span>
+        </div>
+      </div>
+      <div class="login-actions">
+        <button class="btn btn-primary" id="btnYtLogin" style="font-size:11px;">▶ Accedi con Google</button>
+        <button class="btn btn-stop" id="btnYtLogout" style="display:none;font-size:11px;">🚪 Disconnetti</button>
+        <button class="btn btn-secondary" id="btnCookieFile" style="font-size:11px;" title="Usa un file cookies.txt esportato manualmente">📄 File manuale</button>
+        <span style="font-size:10px;color:#4ade80;" id="cookieStatus"></span>
+      </div>
+      <div class="settings-hint" style="margin-top:6px;">
+        Il login è necessario per i video con verifica età o playlist private.<br>
+        Con "Accedi con Google" il browser si apre, accedi, e i cookie vengono salvati automaticamente.
+      </div>
+    </div>
+
+    <div class="settings-divider"></div>
+
+    <div class="settings-section" style="margin-bottom:0;">
+      <div class="settings-label">ℹ Info</div>
+      <div class="settings-hint">
+        SonicDownloader v3.30.6 &nbsp;·&nbsp; Electron + yt-dlp + ffmpeg<br>
+        Usa solo per contenuti di cui hai i diritti.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── HEADER ── -->
+<div class="header">
+  <div class="header-logo" style="background:none;box-shadow:none;"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAARAklEQVR4nI2ZeZBfVZXHP/e++9777f3rX+9LOp3ubJBAJoEQNqFYxhF1RGV0CqaocRkLRsbBcoNRQKQcV0bEEopVRx3RGRGYAMoSFiMhEJYkhOxJJ+l0J713//bfW+6980dHnRGc8lS9v+6pV997zrn3fM/3CsDyZ5gQEoRACIHAorV+i4/jKBACHUdvWfM9F6TCWMAarDHE/8tPCIG1b4Ui/hRAKSXScUE4SEchHQd0TBTFaCdBpqmF7q4uerta6WhvRQAvbtpEvd7g4osvpL9/EXPFIsPHZ9i5b4iRI4dw4ypN2QRuIoV0XKw1BPUKs9MTNBr1tw/MHwMUQCqTw+CgtUFIiTWaMIiRLX10LD2VZb095FVIbW6CyfERJifGKJfK1BsNjLH4nqK50MqCvj5WrFzFspWnYbLtbNyxl83PbKAxvIvmlMBLJvH8BJlUitLsOPv37f7/ATpSkmtuIwhjgiBAOg5REOHk+1lx3rto7u0iHn6TkR2bOT56iNA4JHJdZFt6yDa1odvWIr0E2dktBOUJSjPHmZs6jokDli9dyl9f8RE6Vp/Hrv2T/OIH9xEPb0O5Bs9TdHUvwCHg9Vc3o7X5fbp/D1AIQUtrJ5VagzCKkI4i1hl6zrmMs85dy+TOjWx/9iHm5qbwUs2k2v8CmWjHxmWEqRDHDqHXBdbiRzMkUx6pXAYvkUbWJxg/uo/psUP09y7ng9fdxKMr1jD32LOk9u5ClWepDW+hva0VV0S89somYL4mhRDCWmtpae0giAzVWh3HdYmdPtZ84issbTe8cO/NjBx8Az+Zxm9eTaw6iWojxLN7Qc/iK/CyWbxMGrepgNPcg20eQAycjsi14emI1q5OEvk81TAkyDdz6rqFmPUbeP7xcfTkK7jjz6KNpae7m5mJIxwa2n/iQIL1PI90rpW5YglHKWJ/Ced88Q7aKm/yq299hqhRIlfoJKBAqH2o7cZENdr6l5M55/3YBedisv3EfivGy2H8BFoIIgcMYBUoH4QPLYOwqDTN1PfuYdv6l7jmxr/neHMLD3376/RwHCGgs72VN7dvplGvzwPM5JoJIoOxBi26WHvDD+nWQzx2yzVIGZNIZak1NFbXkbaKUgVWX/0FJk+5mvGhJsrjQAiICJICMhKyEpqBZkjmwU/DQBe0bHyWAz97nqNjdeLDP2NRu8+31z/H91+a4MVvXEebmCCXzVKeG2Nk+BBKSom1AmMtOlAMfuR6elJlnrzxCzjKoPwclUoJSYxUHjZq5dLr7mP7qZdy4MkYDhchaWBBFv8kl2Q+QLolPFnBiYskoyr+SIWTFrYz86Md7N2nmGq4mKE7cWXMoeFRrv/QB7htw0ZGDl7FxAPfxAsCXD8NgBJSEhuDCQPSKy/jlNNWsum7n0LrBirTQW1uGuHmcToWoQpruPDCsyh+8FL2fC1AjtSx2Rg607T2HCC56QdE4yOEFUujYdFRjulGRFSapLJ0DfWBs6iNPkvt5VtJeA6ZwXchC8s58Nt/497PXssN37mPq7a8QHDoGfykh6MUSjB/z1kny+oL/5ID/307s0Ovk1z4TspRCufUVvyly4i7zyJ36lIWrE3xzAshcqKG9atYIN+ZZcmen/HiA98GWsFrh1QzJHLIxiwtH7mFclFTfPg69NwbJDNNJP0kYmobrYOnEJ9yGesfvJ+L338pl1/zCR7459/S42mkVCciGGkyy9aiGyX27xrG9F1C1csimlxI5RBeK6KrhUy/z39tKDL9dAqCCsKrIpBUD02TO+0KPpBLM7P3JcYO7OL4yBZKcxEGmPz5TTC2BeVYMk2tOFIipEDHMeUdD9G75nLmDm7mezd9npsf38z6k04n3Pc8QkoUWKzj43R2MbrtGYJaFZHvhkYIbh6ZWU5qyXnYRXnOWelTWqB4eqVLZVMau30E4gZRtcET25ppHfgcPSsEi5Nl1jUOIcZ3U9yzheGtGxmptzJRLBIEDTKpFEYbHKWozE6RPf4afSefyYFXH2Lf049w6sUX8PobGxBYhKeU1fkB+pavpHbgVcbHRpHKx6o0NtVGomcNJr0UU1hF5vzzaOlQHL3zZtz3XYzp+iuCSYEpB1Ctzm9KCEgnoDVLrkuyoAMGs7CgdpjMzt/y3H/8hNd3bCGb8ef7hLW4iRSdy85mx8aHOfP0dZx/zRf53o3XY47tQCilrNe1mkXtaQ7s2kpAZp65xGWQPlb44DRBcw80tSMDSza2yPpO5KJe5KrzEINr0Z0nEeQKhFKhI9CBhagOvoC8iywoVnTCp72AX33qczyy/ic0pRMYK7BxlfTge6lOHqA+sYsbv3UX9z/wC4ZfWY8yQtHkW6LaDEGjhswvwRgLwkN4WURTHpFNY/MD4LZjjoxSXnIm7txpmF3rUSO7UYUSmZZXSbc5mAUpzJJ+GFhMvHCAhgVPx6T9CKTmoaYE//SNf2Xba5s5NnYA1/MRUcSsjUktXEs48gojB95kSW8nh7eAkkKSS3lUpsdB+NhwAhpTCDcLYYCdnoFyAqbGsSoNOo35zROEpoq1MVFYRHoZgkaIHJ5BvziOo0t4iYjMYB8rbvkq2TX9dFlDbcTlxR+F/KiQo3v5KRw6vAOlXKzyECNbkZ2nAYKD+3bRu3glIFBCgOsIGo0aqCzIBGCxOgIrEMk8wslhaiFu0ifV0UeQbqNxeAjSkuWrutm78U5C4hPcowWTytFozFIa2sMlV15FoWmAp/6zxo5tFhO4bOoYpjpUw1fzxFcgoT6FrB1DqDTDRw6RaW5HSAeFNRw7Pko1UJBbDCo3X3NNvZBrRXYuoGnJWoo2C01dmEX9RHnJCoq8oyXBzmc2cuSN11m09gIuee+5NC3q5dhUwPZHN2ATJ7PpVwX23foKpm7AdUl19KD3/Jxo6k0MEmE0wlosFhPNkUxlOXz4CEFkUMpBCSHQYYOoUQRnFnQdGU9j5hpQGkbqgIrXjNOyCrm4QLgw4pxVPmvnYg7/4BXKR+v0n/llKt1pXvnY+5gAOl4+yrHZmJERi65tBdeCSOGnl5Ar3U84sR5TH8NYB2kMAMZoTBziei71uiTWEdZalDXzrNlP5mi4BUR6EHKtuIvXIFIZvJVnEHe0IF1DeonD2lWSd2w8xG2ffZGJsRLS9zGhJuNHTO8KiHyFGJ6gODKEnlPIZAJh06RTmmTtdkxjK0FlhlqthOt6GGMQAqy1GK2Jo5Bk0ieOIozRKCsdWtq6KM5MUa/XkFmFiYv4/hyidzlxMcDtDPDOSPCZQRi75zVuuOVFdL0BTgJTcVGFBbS2pxg9bIhSDrWJMo6fwc84uBwiKfchyttBuWjhUZ49hjoBbh4dWGswJqZeLdPXP0jvggWMHxtGCalQfhrlFKG6D+GEiFhikini6Qyh10dSNnHRKZYXbn6Nx7+/B9w8qaaIkwY1XqKNcvEgo/umEP1nQgLCw6MskP9OamEOdJU9QyPUGi5ClKlPDyGki0WAUGAisDHGayF2mjDxKF6qh0YYgXBQRsdUSnMk8v0wVYFwDuHmietHiUtJMuuWc+VHHY7e+gTPPTZLc59G+VAtvsnBgy/QmncZXPchouIAB/bXQMUop5eud3+U+tBrHHnzZaqlGYLKLKAR0gfpYZ0UQld/X3/Kb0YqD5wsTrKZqam9IEAJqymVa7TnFaqtH3tsCypZIt57EL8wyZJLruDJL/2Uik1R+GAvjfFp5g7vJaodpDY9SyNqZnasmUrPleiRcYQKGek4n1rYgt3+Q2YO7gQdIaQLInFiVPOxOpiPnhBYJD4z6JlhKJyOlZpiNUaiUZiIuvWoV4u0rjyNsbE9uBa8bCvJlafxxoN3owNJoiNHtOVB9MhroI8xT+ZB04R37Me09BcYO/89mLqm2TtC8tGvM3NsJ2gDqoAVHsQ1cDTChiAkVnqgQ4T00E6GhlS0rVpHfXo3dS3AGpQAjI2YCn1WdrTTWHExpclREuEYc7+5A2NDABr7T2w+fzI2MwCVOk4mQVybZPLIcdKpbbS/81zMQB7xtc1MHThImF5AYnAFWnWTyAxidInq7megcRh0CaFrWKuR6R7qDUl+xUW0dRQYnfCxcRUQSCtdKI8Rti5kbO+r9K5ah2k0CGIwCHCbEX4X+MtI/s3dOKdcSbrnLDpuugfTfTZWF4irHsVGCyqZpd0axut5GlEWQyex00frx68ivWIRqaY2Bj5/Jza/GKQF6YCbA2GxYZFc7yLK+zYTN7VDZRKkQiEENqzg6QaTbhPpo6+SyAoaw6MIN4nVAdZo8JsJi7OYQy9jRIyaGKdw1nmYU8+AluWYs09m4dnQ4cPY9e9Cr1sFIzuRToyaG2du+1OU9+2lmFWg57BBBYtGuil0eYLk4Gq8se3MNnXB9CQ2asxrQY5yLcLBqgLdV91O8fFv0dPew96XngAnCVaD480Xc70CyQFIdoPfjmrrwWTTqGyGdHsvqqsd11MwVaQ2NUZY10TFED09jakcg2AUxreCF+F6CquDE8qBYPnaC5gqzpC98JMcvPtaXMqEjSrCcRwrVII4qNF+0XX0nrmOg3ddSyLlMTE2h2weQLS0oN0UPc0F1MRuVCLB+GydkDR9/QOIMOD42DGUcBDSZ/b4Xlq7FqL9DK6fpDw5REvWob0pgcl2E6e7mT66j0p5knhuiiY/xhiHRf94O/s3PM3Mc7fhJpNE9RJCSmmVmyQyBhtnOeerj1I9tJFt9/0LTrKAiOaI45Db77ifhX0DjI5PUSnNccdd93Dbrf/K7t17EY5i0eBiHnv6Bb5y/Se57G8/zumrV9DZ2UNbIceTz2/iM9f8A5s3v4xy4KlfP87G32zA8xRk+gimpzjj2q8iOs/g5RsuxfXKCAtho4wyxiClQBgQTonN372Oy+56hOrYEfY/di+O5yJEzCtbtzMXucxNT9LRv4zeJSsoySZu/Np3sDrmjvt/TKGjiw0bX+fDV/wdi049gxd+/Qhec5LuvgG2Dx3ny1+6DjeVxlEObiJFrDV6eoZlH76arouuZP0nPoDjzCFwsTb+g3jkuh7C8QhjgzAO/rJLufgr3+Xg3Z/m4DMPEArF4jUX0j24EhvWyRTaefWJnzK4+gLa+wYAy/iRIabHhxFukv0vPcy7P/ZlhnZtJZVt4ciOFznj3VfgK0kym2Nk50u88OSDKJFi1SWX03P1N3nii9cS7v4l0gGlFHGjjNbxH9Qtz08Ra7BSYiOLu/R99F5+FfFz9zB26CjJ9nYY3UrnKSdTHB/D812CSKP8BMIYoiikfPgw+e5u/GyW6YlJkokE2UIzWsh5YaCjh9HXXicsLME0ND19nXDhxxl+4F707odxPIEjJFZHRGHtrfKbcpNoY7HCwWoDbStRp7+HRK2En1GUt/wSb2A50sQI6WClmL/L6iWcdJ5gZgapJE4ijVASHQY4XgLHT0JQIxKa6MB+Cmd+iFoQU3HTRFuegvHXcZREiPnuEQfVtxcwhRA4KjGvSCFAx/NTXesyvLhBIqmI6lXq0/vfooT+OZZsHkCl84QRBK4P47uRpoZwPSQSa2LiE5F7W4C/M6k8hFRYBNYY0BHWTZPI91DoXYIxMY3ZUWx9FqI6Og7RcUQcRSDAcRyU6+EoH+EmUZlW/OZehOMydWQPjdljiLiMcBRCOkghMHGIjoO3bOpPiuhCSIR0QMj5z1qMjsAa3HQBr6kD6aWQUiCthihAn0iN46dBOhghsRZsFNAoTxFVphFSnBDn5/9prcHqCGvN20b9TwL8v2DFvOuJZwij4z8sOt6JTiMRZr44kAprYtDhPKX6XWYcNa89nxiSeJtnhz+2/wGkQvWZiXlcPQAAAABJRU5ErkJggg==" style="width:40px;height:40px;object-fit:contain;" alt="logo"/></div>
+  <div>
+    <div class="header-title">Sonic<span>Downloader</span></div>
+    <div class="header-sub">YOUTUBE RIPPER &nbsp;·&nbsp; HI-FI AUDIO</div>
+  </div>
+  <div id="loginIndicator" style="display:none;font-size:10px;color:#4ade80;border:1px solid #4ade8030;border-radius:99px;padding:2px 9px;display:flex;align-items:center;gap:5px;">
+    <div style="width:5px;height:5px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;"></div>
+    <span id="loginIndicatorText">Connesso</span>
+  </div>
+  <div class="header-version">v3.30.6</div>
+  <button class="btn btn-secondary" id="btnOpenListView" title="Cerca da lista titoli" style="font-size:12px;padding:8px 12px;">📝 Lista</button>
+  <button class="btn btn-secondary" id="btnOpenMultiUrl" title="Link multipli" style="font-size:12px;padding:8px 12px;">🔗 Link</button>
+  <button class="btn btn-secondary" id="btnOpenGenSet" title="Genera Set" style="font-size:12px;padding:8px 12px;">🎛 Set</button>
+  <button id="btnOpenBrowser" title="Apri il browser per navigare e scaricare" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#e63946,#a8324a);color:#fff;border:none;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 10px #e6394650;">🎵 Apri Browser</button>
+  <button class="header-settings-btn" id="btnOpenSettings" title="Impostazioni">⚙</button>
+</div>
+
+<!-- ── TOOLS BAR ── -->
+<div class="tools-bar">
+  <div class="tool-badge err" id="b-ytdlp"><div class="tool-dot"></div>yt-dlp</div>
+  <div class="tool-badge err" id="b-ffmpeg"><div class="tool-dot"></div>ffmpeg</div>
+  <div class="tool-badge err" id="b-deno"><div class="tool-dot"></div>deno</div>
+  <div class="tool-badge err" id="b-spotdl"><div class="tool-dot"></div>spotdl</div>
+  <div class="tools-label" id="toolsLabel"></div>
+</div>
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+  <!-- LINK CARD -->
+  <div class="card">
+    <div class="card-title">
+      🔗 Link YouTube
+      <span id="urlTypeLabel" style="display:none;"></span>
+    </div>
+    <div class="input-row">
+      <input type="text" id="urlInput" placeholder="Incolla il link della playlist o del video..."/>
+      <button class="btn btn-secondary" id="btnName">📋 Info</button>
+    </div>
+    <div class="pn-box" id="pnBox">
+      <span class="pn-label">Playlist:</span>
+      <span class="pn-value" id="pnText"></span>
+      <span class="pn-count" id="pnCount"></span>
+    </div>
+    <!-- Banner singolo -->
+    <div class="banner single" id="singleBox" style="display:none;">
+      <span class="banner-label">🎵 Video singolo</span>
+      <span style="font-size:10px;color:#fff;margin-left:auto;">📁 Sottocartella con data creata automaticamente</span>
+    </div>
+    <!-- Banner misto -->
+    <div class="banner mixed" id="mixedBox" style="display:none;">
+      <span class="banner-label">⚠ Link misto — contiene un video e una playlist</span>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;">
+        <button class="btn btn-success" id="btnUseSingle" style="font-size:10px;">🎵 Solo questo video</button>
+        <button class="btn btn-secondary" id="btnUsePlaylist" style="font-size:10px;">📋 Tutta la playlist</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- (Cerca da lista titoli / Link multipli / Genera Set spostati nella striscia in alto) -->
+
+  <!-- DESTINATION + FORMAT CARD -->
+  <div class="card">
+    <div class="card-title">📁 Destinazione &nbsp;·&nbsp; 🎚 Formato</div>
+    <div class="folder-row">
+      <div class="folder-path" id="folderPath">C:\Musica</div>
+      <button class="btn btn-secondary" id="btnFolder">Sfoglia</button>
+    </div>
+    <div class="format-grid">
+      <div class="fmt active" data-f="wav">WAV</div>
+      <div class="fmt" data-f="mp3">MP3</div>
+      <div class="fmt" data-f="flac">FLAC</div>
+      <div class="fmt" data-f="aac">AAC</div>
+      <div class="fmt" data-f="opus">OPUS</div>
+      <div class="fmt" data-f="m4a">M4A</div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;margin-bottom:2px;font-size:12px;color:#c4b5fd;cursor:pointer;user-select:none;line-height:1.4;">
+      <input type="checkbox" id="chkNumeraFile" checked style="width:16px;height:16px;accent-color:#a78bfa;cursor:pointer;">
+      Numera i file (es. 001 - Artista - Titolo.wav) — l'artista resta sempre nel nome, numerato o no
+    </label>
+  </div>
+
+  <!-- DOWNLOAD CARD -->
+  <div class="card">
+    <div class="card-title">⬇ Download</div>
+
+    <div class="now-playing" id="nowPlaying">
+      <div class="np-thumb-ph" id="npThumbPh">
+        <div class="gear3d-scene">
+          <svg class="gear3d" id="npGear3d" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#a78bfa" d="M50 8 L58 8 L61 20 L71 16 L76 24 L68 32 L80 38 L80 46 L68 52 L76 60 L71 68 L61 64 L58 76 L50 76 L47 64 L37 68 L32 60 L40 52 L28 46 L28 38 L40 32 L32 24 L37 16 L47 20 Z"/>
+            <circle cx="54" cy="42" r="14" fill="#0d0d20"/>
+            <circle cx="54" cy="42" r="8" fill="#e63946"/>
+          </svg>
+          <svg class="gear3d gear3d-small" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#e63946" d="M50 8 L58 8 L61 20 L71 16 L76 24 L68 32 L80 38 L80 46 L68 52 L76 60 L71 68 L61 64 L58 76 L50 76 L47 64 L37 68 L32 60 L40 52 L28 46 L28 38 L40 32 L32 24 L37 16 L47 20 Z"/>
+            <circle cx="54" cy="42" r="12" fill="#0d0d20"/>
+          </svg>
+        </div>
+      </div>
+      <img class="np-thumb" id="npThumb" style="display:none" alt=""/>
+      <div class="np-info">
+        <div class="np-label">In download</div>
+        <div class="np-title" id="npTitle">—</div>
+        <div class="np-index" id="npIndex"></div>
+      </div>
+      <div class="np-pulse" id="npPulse" style="display:none"></div>
+    </div>
+
+    <div class="prog-section" id="progSec">
+      <div class="prog-top">
+        <span id="progText">Avvio...</span>
+        <span class="prog-pct" id="progPct">0%</span>
+      </div>
+      <div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>
+      <div class="prog-wrap2"><div class="prog-bar2" id="progBar2"></div></div>
+    </div>
+
+    <div class="log-box" id="logBox"></div>
+
+    <div class="action-row">
+      <div class="status-text" id="statusText">Pronto</div>
+      <button class="btn btn-stop" id="btnStop" style="display:none;">⛔ Stop</button>
+      <button class="btn btn-success" id="btnOpenDir" style="display:none;">📂 Apri</button>
+      <button class="btn btn-warn" id="btnResume">📂 Riprendi</button>
+      <button class="btn btn-warn" id="btnReset">🗑 Azzera</button>
+      <button class="btn btn-primary" id="btnStart">▶ Avvia</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let baseFolder = 'C:\\Musica';
+let folder = 'C:\\Musica';
+let format = 'wav';
+let playlistName = '';
+let totalTracks = 0;
+let running = false;
+let detectedSingle = false;
+let singleVideoTitle = '';
+
+// ── URL detection ──
+function checkUrlType(url) {
+  const s = (url||'').trim();
+  return /[?&]v=([^&]+)/.test(s)||/youtu\.be\/([^?&]+)/.test(s) ? !/[?&]list=/.test(s) : false;
+}
+function checkUrlMixed(url) {
+  const s = (url||'').trim();
+  return (/[?&]v=([^&]+)/.test(s)||/youtu\.be\/([^?&]+)/.test(s)) && /[?&]list=/.test(s);
+}
+function stripListParam(url) {
+  return url.replace(/[?&]list=[^&]*/g,'').replace(/[?&]index=[^&]*/g,'').replace(/&&/g,'&').replace(/\?&/,'?');
+}
+
+let spotdlAvailable = false;
+function detectUrlPlatform(s) {
+  const l = (s||'').toLowerCase();
+  if (l.includes('soundcloud.com')) return 'soundcloud';
+  if (l.includes('spotify.com') || l.startsWith('spotify:')) return 'spotify';
+  return 'youtube';
+}
+
+function updateUrlTypeUI(url) {
+  const s = (url||'').trim();
+  const label = document.getElementById('urlTypeLabel');
+  const singleBox = document.getElementById('singleBox');
+  const mixedBox = document.getElementById('mixedBox');
+  const btnName = document.getElementById('btnName');
+  singleBox.style.display = 'none';
+  mixedBox.style.display = 'none';
+
+  // ── SoundCloud / Spotify: percorso dedicato, niente UI YouTube ──
+  const platform = detectUrlPlatform(s);
+  if (platform === 'soundcloud' || platform === 'spotify') {
+    detectedSingle = false;
+    playlistName = ''; totalTracks = 0;
+    document.getElementById('pnBox').classList.remove('visible');
+    btnName.style.display = 'none';
+    refreshFolder();
+    if (platform === 'soundcloud') {
+      label.textContent = '🟠 SOUNDCLOUD';
+    } else {
+      label.textContent = spotdlAvailable ? '🟢 SPOTIFY' : '🟢 SPOTIFY — manca spotdl.exe in tools\\';
+    }
+    label.style.display = '';
+    return;
+  }
+
+  const isSingle = checkUrlType(s);
+  const isMixed = checkUrlMixed(s);
+  detectedSingle = isSingle;
+  if (isSingle) {
+    label.textContent = 'SINGOLO'; label.style.display = '';
+    singleBox.style.display = 'flex';
+    btnName.style.display = 'none';
+    document.getElementById('pnBox').classList.remove('visible');
+    playlistName = ''; totalTracks = 0; refreshFolder();
+  } else if (isMixed) {
+    label.textContent = 'MISTO'; label.style.display = '';
+    mixedBox.style.display = 'flex';
+    btnName.style.display = '';
+    detectedSingle = false;
+  } else if (s.length > 10) {
+    label.textContent = 'PLAYLIST'; label.style.display = '';
+    btnName.style.display = '';
+  } else {
+    label.style.display = 'none';
+    btnName.style.display = '';
+  }
+}
+
+// ── Folder logic ──
+function safeFolderName(n) { return (n||'Playlist').replace(/[\\/:*?"<>|]/g,'_').replace(/\s+/g,' ').trim()||'Playlist'; }
+
+function chiediNomeCartella(suggerito) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('nomeCartellaModal');
+    const input = document.getElementById('nomeCartellaInput');
+    input.value = suggerito;
+    modal.style.display = 'flex';
+    input.focus();
+    input.select();
+
+    function chiudi(valore) {
+      modal.style.display = 'none';
+      btnConferma.removeEventListener('click', onConferma);
+      btnAnnulla.removeEventListener('click', onAnnulla);
+      input.removeEventListener('keydown', onKeydown);
+      resolve(valore);
+    }
+    const btnConferma = document.getElementById('nomeCartellaConferma');
+    const btnAnnulla = document.getElementById('nomeCartellaAnnulla');
+    function onConferma() { chiudi(input.value.trim() || suggerito); }
+    function onAnnulla() { chiudi(suggerito); }
+    function onKeydown(e) { if (e.key === 'Enter') onConferma(); }
+
+    btnConferma.addEventListener('click', onConferma);
+    btnAnnulla.addEventListener('click', onAnnulla);
+    input.addEventListener('keydown', onKeydown);
+  });
+}
+
+function todayDateStr() {
+  const d = new Date();
+  const pad = x => String(x).padStart(2,'0');
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+}
+// Data + ora: usata per le cartelle di "sessioni" (lista titoli, link multipli) dove
+// due download diversi nello stesso giorno NON devono mai finire mischiati nella
+// stessa cartella con numerazione che si sovrappone.
+function todayDateTimeStr() {
+  const d = new Date();
+  const pad = x => String(x).padStart(2,'0');
+  return todayDateStr() + ' ' + pad(d.getHours()) + '-' + pad(d.getMinutes()) + '-' + pad(d.getSeconds());
+}
+function computeFolder() {
+  if (detectedSingle) {
+    // Come per le playlist: ogni video singolo va sempre nella sua sottocartella
+    // con nome + data, così due download consecutivi non finiscono mai mischiati
+    // nella stessa cartella, anche se hanno titoli simili o identici.
+    if (!singleVideoTitle) return baseFolder.replace(/\\+$/,'');
+    const safe = safeFolderName(singleVideoTitle) + ' (' + todayDateStr() + ')';
+    const last = baseFolder.replace(/\\+$/,'').split('\\').pop()||'';
+    if (last.toLowerCase()===safe.toLowerCase()) return baseFolder.replace(/\\+$/,'');
+    return baseFolder.replace(/\\+$/,'')+'\\'+safe;
+  }
+  if (!playlistName) return baseFolder;
+  const safe = safeFolderName(playlistName) + ' (' + todayDateStr() + ')';
+  const last = baseFolder.replace(/\\+$/,'').split('\\').pop()||'';
+  if (last.toLowerCase()===safe.toLowerCase()) return baseFolder.replace(/\\+$/,'');
+  return baseFolder.replace(/\\+$/,'')+'\\'+safe;
+}
+function refreshFolder() { folder=computeFolder(); setFolder(folder); }
+function setFolder(f) { const el=document.getElementById('folderPath'); el.textContent=f; el.classList.add('set'); }
+function getArchiveFile() { return folder+'\\'+'archivio_'+(playlistName||'playlist').replace(/[^a-zA-Z0-9_\-]/g,'_')+'.txt'; }
+
+// ── Settings panel ──
+document.getElementById('btnOpenSettings').addEventListener('click', () => {
+  document.getElementById('settingsOverlay').classList.add('open');
+});
+document.getElementById('btnCloseSettings').addEventListener('click', () => {
+  document.getElementById('settingsOverlay').classList.remove('open');
+});
+document.getElementById('settingsOverlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('settingsOverlay').classList.remove('open');
+});
+
+// ── Toggle API key visibility ──
+document.getElementById('btnShowKey').addEventListener('click', () => {
+  const inp = document.getElementById('apiKeyInput');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  document.getElementById('btnShowKey').textContent = inp.type === 'password' ? '👁' : '🙈';
+});
+
+// ── Download automatico tool mancanti ──
+async function scaricaToolsMancanti(stato) {
+  const overlay = document.getElementById('toolsOverlay');
+  const list = document.getElementById('toolsProgressList');
+  const nomi = { ytdlp: 'yt-dlp', ffmpeg: 'ffmpeg', deno: 'deno', spotdl: 'spotdl (Spotify)' };
+  const mancanti = Object.keys(nomi).filter(k => !stato[k]);
+
+  list.innerHTML = mancanti.map(k => `
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+        <span>${nomi[k]}</span><span id="toolsPct-${k}">0%</span>
+      </div>
+      <div style="background:#1a1a2e;border-radius:6px;height:8px;overflow:hidden;">
+        <div id="toolsBar-${k}" style="background:#e63946;height:100%;width:0%;transition:width .2s;"></div>
+      </div>
+      <div id="toolsLabelRow-${k}" style="font-size:10px;color:#fff;margin-top:2px;">In attesa...</div>
+    </div>
+  `).join('');
+
+  overlay.style.display = 'flex';
+  log('⬇ Scarico i tool mancanti (yt-dlp/ffmpeg/deno)... prima volta, ci vuole qualche minuto.', 'warn');
+
+  window.api.onToolsProgress(({ tool, pct, label }) => {
+    const bar = document.getElementById('toolsBar-' + tool);
+    const pctEl = document.getElementById('toolsPct-' + tool);
+    const labelEl = document.getElementById('toolsLabelRow-' + tool);
+    if (bar) bar.style.width = pct + '%';
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (labelEl) labelEl.textContent = label;
+  });
+
+  let risultato;
+  try {
+    risultato = await window.api.downloadMissingTools();
+  } catch (e) {
+    overlay.style.display = 'none';
+    log('❌ Errore imprevisto durante la preparazione degli strumenti: ' + (e && e.message ? e.message : e), 'err');
+    log('⚠ Riavvia il programma e riprova. Se persiste, mandami questo messaggio.', 'warn');
+    return;
+  }
+  overlay.style.display = 'none';
+
+  const t2 = await window.api.checkTools();
+  setBadge('ytdlp', t2.ytdlp); setBadge('ffmpeg', t2.ffmpeg); setBadge('deno', t2.deno);
+
+  if (risultato.errori && risultato.errori.length) {
+    risultato.errori.forEach(e => log('❌ ' + e, 'err'));
+    log('⚠ Alcuni tool non si sono scaricati. Controlla la connessione e riavvia l\'app, oppure mettili a mano in tools\\', 'warn');
+  }
+  if (t2.ytdlp && t2.ffmpeg && t2.deno) {
+    log('✔ Tools pronti. Incolla un link (YouTube, SoundCloud o Spotify) per iniziare.', 'ok');
+  }
+}
+
+
+window.addEventListener('DOMContentLoaded', async () => {
+  // Listener globale per i log — sempre attivo, anche fuori dai download
+  // (usato per esempio dalla ricerca 1001tracklists)
+  window.api.onLog(msg => {
+    msg.split('\n').forEach(line => {
+      if (!line.trim()) return;
+      if (line.includes('HTTP Error 403')) return; // gestito automaticamente dal retry, non serve mostrarlo
+      log(line);
+    });
+  });
+
+  const t = await window.api.checkTools();
+  setBadge('ytdlp', t.ytdlp); setBadge('ffmpeg', t.ffmpeg); setBadge('deno', t.deno);
+  setBadge('spotdl', t.spotdl); spotdlAvailable = !!t.spotdl;
+  document.getElementById('toolsLabel').textContent = t.toolsPath;
+
+  if (!t.ytdlp || !t.ffmpeg || !t.deno || !t.spotdl) {
+    await scaricaToolsMancanti(t);
+  } else {
+    log('✔ Tools pronti. Incolla un link (YouTube, SoundCloud o Spotify) per iniziare.', 'ok');
+  }
+  if (!t.spotdl) log('ℹ spotdl verrà scaricato automaticamente per supportare Spotify.', 'info');
+
+  // Carica API key
+  try {
+    const k = await window.api.getApiKey();
+    if (k) { document.getElementById('apiKeyInput').value=k; document.getElementById('apiKeyStatus').textContent='✔'; }
+  } catch(e){}
+
+  // Carica chiavi Spotify
+  try {
+    const sk = await window.api.getSpotifyKeys();
+    if (sk && sk.clientId) {
+      document.getElementById('spotifyClientIdInput').value = sk.clientId;
+      document.getElementById('spotifyKeysStatus').textContent = '✔';
+    }
+  } catch(e){}
+
+  // Carica chiave Last.fm
+  try {
+    const lk = await window.api.getLastfmKey();
+    if (lk) { document.getElementById('lastfmKeyInput').value = lk; document.getElementById('lastfmKeyStatus').textContent = '✔'; }
+  } catch(e){}
+
+  // Carica Client ID Jamendo
+  try {
+    const jid = await window.api.getJamendoId();
+    if (jid) { document.getElementById('jamendoIdInput').value = jid; document.getElementById('jamendoIdStatus').textContent = '✔'; }
+  } catch(e){}
+
+  // Carica token Discogs
+  try {
+    const dtok = await window.api.getDiscogsToken();
+    if (dtok) { document.getElementById('discogsTokenInput').value = dtok; document.getElementById('discogsTokenStatus').textContent = '✔'; }
+  } catch(e){}
+
+  // Carica chiave Gemini
+  try {
+    const gkey = await window.api.getGeminiKey();
+    if (gkey) { document.getElementById('geminiKeyInput').value = gkey; document.getElementById('geminiKeyStatus').textContent = '✔'; }
+  } catch(e){}
+
+  // Carica le fonti extra selezionate in "Genera Set" (ricorda le scelte tra un
+  // riavvio e l'altro, invece di riselezionarle sempre tutte).
+  try {
+    const fontiSalvate = await window.api.getGensetFonti();
+    if (fontiSalvate && Array.isArray(fontiSalvate)) {
+      const mappaCheckbox = {
+        deezer: 'gsUseDeezer', spotify: 'gsUseSpotify', lastfm: 'gsUseLastfm',
+        applemusic: 'gsUseAppleMusic', musicbrainz: 'gsUseMusicbrainz', discogs: 'gsUseDiscogs',
+        jamendo: 'gsUseJamendo', audius: 'gsUseAudius', internetarchive: 'gsUseInternetArchive'
+      };
+      Object.keys(mappaCheckbox).forEach(fonte => {
+        const el = document.getElementById(mappaCheckbox[fonte]);
+        if (el) el.checked = fontiSalvate.includes(fonte);
+      });
+    }
+  } catch(e){}
+
+  // Stato login
+  try {
+    const cfg = await window.api.getCookieCfg();
+    if (cfg && cfg.file) { setLoginStatus(true, cfg.file); }
+    else { const r = await window.ytLogin.checkLogin(); if (r&&r.loggedIn) setLoginStatus(true,'sessione'); }
+  } catch(e){}
+});
+
+// ── API key ──
+document.getElementById('btnSaveKey').addEventListener('click', async () => {
+  const k = document.getElementById('apiKeyInput').value.trim();
+  const ok = await window.api.setApiKey(k);
+  const st = document.getElementById('apiKeyStatus');
+  st.textContent = ok ? (k?'✔':'–') : '❌';
+  if (ok) log(k?'🔑 Chiave API salvata.':'🔑 Chiave API rimossa.', k?'ok':'warn');
+});
+
+document.getElementById('btnSaveSpotifyKeys').addEventListener('click', async () => {
+  const clientId = document.getElementById('spotifyClientIdInput').value.trim();
+  const clientSecret = document.getElementById('spotifyClientSecretInput').value.trim();
+  const ok = await window.api.setSpotifyKeys({ clientId, clientSecret });
+  const st = document.getElementById('spotifyKeysStatus');
+  st.textContent = ok ? (clientId && clientSecret ? '✔' : '–') : '❌';
+  if (ok) log(clientId && clientSecret ? '🟢 Chiavi Spotify salvate.' : '🟢 Chiavi Spotify rimosse.', 'ok');
+});
+
+document.getElementById('btnSaveLastfmKey').addEventListener('click', async () => {
+  const key = document.getElementById('lastfmKeyInput').value.trim();
+  const ok = await window.api.setLastfmKey(key);
+  const st = document.getElementById('lastfmKeyStatus');
+  st.textContent = ok ? (key ? '✔' : '–') : '❌';
+  if (ok) log(key ? '🎧 Chiave Last.fm salvata.' : '🎧 Chiave Last.fm rimossa.', 'ok');
+});
+
+document.getElementById('btnSaveJamendoId').addEventListener('click', async () => {
+  const id = document.getElementById('jamendoIdInput').value.trim();
+  const ok = await window.api.setJamendoId(id);
+  const st = document.getElementById('jamendoIdStatus');
+  st.textContent = ok ? (id ? '✔' : '–') : '❌';
+  if (ok) log(id ? '🎵 Client ID Jamendo salvato.' : '🎵 Client ID Jamendo rimosso.', 'ok');
+});
+
+document.getElementById('btnSaveDiscogsToken').addEventListener('click', async () => {
+  const token = document.getElementById('discogsTokenInput').value.trim();
+  const ok = await window.api.setDiscogsToken(token);
+  const st = document.getElementById('discogsTokenStatus');
+  st.textContent = ok ? (token ? '✔' : '–') : '❌';
+  if (ok) log(token ? '💿 Token Discogs salvato.' : '💿 Token Discogs rimosso.', 'ok');
+});
+
+document.getElementById('btnSaveGeminiKey').addEventListener('click', async () => {
+  const key = document.getElementById('geminiKeyInput').value.trim();
+  const ok = await window.api.setGeminiKey(key);
+  const st = document.getElementById('geminiKeyStatus');
+  st.textContent = ok ? (key ? '✔' : '–') : '❌';
+  if (ok) log(key ? '🤖 Chiave Gemini salvata.' : '🤖 Chiave Gemini rimossa.', 'ok');
+});
+
+// ── Login status ──
+function setLoginStatus(loggedIn, detail) {
+  const chip = document.getElementById('loginChip');
+  const chipText = document.getElementById('loginChipText');
+  const btnIn = document.getElementById('btnYtLogin');
+  const btnOut = document.getElementById('btnYtLogout');
+  const cookieSt = document.getElementById('cookieStatus');
+  const indicator = document.getElementById('loginIndicator');
+
+  if (loggedIn) {
+    chip.className = 'login-chip';
+    chipText.textContent = '✔ Connesso a YouTube';
+    btnIn.style.display = 'none'; btnOut.style.display = '';
+    const fname = detail ? detail.split('\\').pop().split('/').pop() : '';
+    cookieSt.textContent = fname ? '('+fname+')' : '';
+    indicator.style.display = 'flex';
+    document.getElementById('loginIndicatorText').textContent = 'YouTube Connesso';
+  } else {
+    chip.className = 'login-chip disconnected';
+    chipText.textContent = 'Non connesso';
+    btnIn.style.display = ''; btnOut.style.display = 'none';
+    cookieSt.textContent = '';
+    indicator.style.display = 'none';
+  }
+}
+
+window.ytLogin.onLoginDone(({ ok, path: p, count, reason }) => {
+  if (ok) { setLoginStatus(true, p); log(`✔ Login completato! ${count} cookie salvati.`, 'ok'); }
+  else log('❌ Login fallito: '+(reason||'errore'), 'err');
+});
+
+document.getElementById('btnYtLogin').addEventListener('click', async () => {
+  document.getElementById('loginChipText').textContent = '⏳ Apertura browser...';
+  log('🔐 Apro browser per login YouTube...', 'info');
+  await window.ytLogin.login();
+});
+document.getElementById('btnYtLogout').addEventListener('click', async () => {
+  const r = await window.ytLogin.logout();
+  if (r&&r.ok) { setLoginStatus(false); log('🚪 Disconnesso.', 'warn'); }
+});
+document.getElementById('btnCookieFile').addEventListener('click', async () => {
+  const f = await window.api.chooseCookieFile();
+  if (f) {
+    const ok = await window.api.setCookieCfg({ browser:'', file:f });
+    if (ok) { setLoginStatus(true, f); log('📄 File cookies.txt caricato.', 'ok'); }
+  }
+});
+
+// ── URL listeners ──
+document.getElementById('urlInput').addEventListener('input', e => updateUrlTypeUI(e.target.value));
+document.getElementById('urlInput').addEventListener('paste', e => setTimeout(()=>updateUrlTypeUI(e.target.value),10));
+
+// ── Info playlist ──
+async function fetchPlaylistInfo(urlArg) {
+  const url = (urlArg || document.getElementById('urlInput').value).trim();
+  if (!url) { log('⚠ Incolla prima il link!','warn'); return false; }
+  const btn = document.getElementById('btnName');
+  btn.disabled=true; btn.textContent='⏳';
+  log('🔍 Recupero info...','info');
+  const [name,count] = await Promise.all([window.api.getPlaylistName(url),window.api.getPlaylistCount(url)]);
+  playlistName = name||'Playlist_YouTube'; totalTracks = count;
+  document.getElementById('pnText').textContent = playlistName;
+  document.getElementById('pnCount').textContent = count>0?count+' brani':'...';
+  document.getElementById('pnBox').classList.add('visible');
+  refreshFolder();
+  log(`✔ "${playlistName}" · ${count} brani · 📁 ${folder}`,'ok');
+  btn.disabled=false; btn.textContent='📋 Info';
+  return true;
+}
+document.getElementById('btnName').addEventListener('click', () => fetchPlaylistInfo());
+
+// ── Format + folder ──
+document.querySelectorAll('.fmt').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.fmt').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); format=b.dataset.f;
+}));
+let pendingFolderChoice = null;
+
+document.getElementById('btnFolder').addEventListener('click', async () => {
+  const f = await window.api.chooseFolder();
+  if (!f) return;
+  baseFolder = f;
+  refreshFolder();
+  pendingFolderChoice = f;
+  document.getElementById('folderModalPath').textContent = f;
+  document.getElementById('folderModal').style.display = 'flex';
+});
+
+
+// ── Mixed URL buttons ──
+document.getElementById('btnUseSingle').addEventListener('click', () => {
+  const clean = stripListParam(document.getElementById('urlInput').value.trim());
+  document.getElementById('urlInput').value = clean;
+  detectedSingle = true;
+  document.getElementById('mixedBox').style.display = 'none';
+  document.getElementById('singleBox').style.display = 'flex';
+  document.getElementById('urlTypeLabel').textContent = 'SINGOLO';
+  document.getElementById('btnName').style.display = 'none';
+  playlistName=''; totalTracks=0; refreshFolder();
+  log('🎵 Modalità singolo — playlist rimossa dal link.','info');
+});
+document.getElementById('btnUsePlaylist').addEventListener('click', () => {
+  detectedSingle=false;
+  document.getElementById('mixedBox').style.display='none';
+  document.getElementById('urlTypeLabel').textContent='PLAYLIST';
+  document.getElementById('btnName').style.display='';
+  log('📋 Modalità playlist — clicca Info per continuare.','info');
+});
+
+// ── Badge ──
+function setBadge(name, ok) {
+  const el = document.getElementById('b-'+name);
+  el.className='tool-badge '+(ok?'ok':'err');
+  el.innerHTML=`<div class="tool-dot"></div>${name}`;
+}
+
+// ── Download ──
+document.getElementById('btnStart').addEventListener('click', async () => {
+  if (running) return;
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) { log('⚠ Incolla il link!','warn'); return; }
+
+  // Se non abbiamo ancora recuperato nome/data della playlist (l'utente ha
+  // premuto "Avvia" senza passare prima da "Info"), lo facciamo ora al volo,
+  // altrimenti la cartella con la data non verrebbe mai creata.
+  if (!detectedSingle && !playlistName) {
+    const ok = await fetchPlaylistInfo(url);
+    if (!ok) return;
+  }
+
+  running=true;
+  document.getElementById('btnStart').disabled=true;
+  document.getElementById('btnStop').style.display='';
+  document.getElementById('btnOpenDir').style.display='none';
+  document.getElementById('btnResume').disabled=true;
+  document.getElementById('btnReset').disabled=true;
+  document.getElementById('progSec').classList.add('visible');
+  document.getElementById('progBar').style.width='0%';
+  document.getElementById('progBar2').style.width='0%';
+  document.getElementById('nowPlaying').classList.add('visible');
+  document.getElementById('npPulse').style.display='';
+  setStatus('running','⏳ Download in corso...');
+  clearLog();
+
+  const archiveFile = getArchiveFile();
+  const total = totalTracks||0;
+  log(detectedSingle?`▶ Singolo · ${format.toUpperCase()}`:`▶ ${total>0?total+' brani':'?'} · ${format.toUpperCase()}`,'info');
+  log(`📁 ${folder}`,'info');
+
+  window.api.removeAllListeners();
+
+  window.api.onNowPlaying(({videoId,title,index,thumb})=>{
+    document.getElementById('npTitle').textContent=title;
+    document.getElementById('npIndex').textContent=index?`#${index}`:'';
+    if (thumb) { document.getElementById('npThumb').src=thumb; document.getElementById('npThumb').style.display=''; document.getElementById('npThumbPh').style.display='none'; }
+    else { document.getElementById('npThumb').style.display='none'; document.getElementById('npThumbPh').style.display=''; }
+  });
+
+  window.api.onLog(msg=>{
+    msg.split('\n').forEach(line=>{
+      if (!line.trim()) return;
+      let cls='l';
+      if (line.includes('ERROR')) cls+=' err';
+      else if (line.includes('WARNING')) cls+=' warn';
+      else if (line.includes('already been recorded')) return;
+      else if (line.includes('HTTP Error 403')) return;
+      else if (line.includes('[download]')||line.includes('[ExtractAudio]')) cls+=' dl';
+      else if (line.includes('[youtube')||line.includes('[info]')) cls+=' info';
+      log(line,null,cls);
+    });
+  });
+
+  window.api.onBlock(({start,total:tot})=>{
+    if (!start||!tot) return;
+    const pct=Math.round(start/tot*100);
+    document.getElementById('progBar').style.width=pct+'%';
+    document.getElementById('progBar2').style.width=pct+'%';
+    document.getElementById('progPct').textContent=pct+'%';
+    document.getElementById('progText').textContent=`Brano ${start} di ${tot}`;
+  });
+
+  window.api.onDone(({code})=>{
+    running=false;
+    document.getElementById('btnStart').disabled=false;
+    document.getElementById('btnStop').style.display='none';
+    document.getElementById('btnOpenDir').style.display='';
+    document.getElementById('btnResume').disabled=false;
+    document.getElementById('btnReset').disabled=false;
+    document.getElementById('progBar').style.width='100%';
+    document.getElementById('progBar2').style.width='100%';
+    document.getElementById('progPct').textContent='100%';
+    document.getElementById('npPulse').style.display='none';
+    if (code===0) { setStatus('done','✔ Completato!'); log('✔ File salvati in '+folder,'ok'); document.getElementById('npTitle').textContent='✔ Completato!'; }
+    else if (code===-1) { setStatus('err','⛔ Interrotto'); document.getElementById('npTitle').textContent='Interrotto'; }
+    else if (code===2) { setStatus('err','❌ Non avviato'); document.getElementById('npTitle').textContent='Errore — vedi log'; }
+    else { setStatus('err','❌ Fallito'); log('❌ Controlla il log sopra.','err'); document.getElementById('npTitle').textContent='Errore'; }
+  });
+
+  await window.api.startDownload({url,destFolder:folder,format,archiveFile,totalTracks:total,isSingle:detectedSingle,numeraFile:document.getElementById('chkNumeraFile').checked});
+});
+
+// ── Lista titoli: cerca + scarica (vista dedicata a schermo intero) ──
+let listaTrovati = []; // { query, ok, id, url, title, thumb, error, removed }
+
+function pulisciRigaLista(riga) {
+  riga = riga.trim();
+  riga = riga.replace(/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}\s*[–-]\s*/, '');
+  riga = riga.replace(/^[–-]\s*/, '');
+  return riga.trim();
+}
+
+// ── Link multipli ──
+document.getElementById('btnOpenMultiUrl').addEventListener('click', () => {
+  document.getElementById('multiUrlView').classList.add('open');
+});
+document.getElementById('muClose').addEventListener('click', () => {
+  document.getElementById('multiUrlView').classList.remove('open');
+});
+
+// ── Genera Set ──
+document.getElementById('btnOpenGenSet').addEventListener('click', () => {
+  document.getElementById('genSetView').classList.add('open');
+});
+
+function salvaFontiGenSet() {
+  const mappaCheckbox = {
+    deezer: 'gsUseDeezer', spotify: 'gsUseSpotify', lastfm: 'gsUseLastfm',
+    applemusic: 'gsUseAppleMusic', musicbrainz: 'gsUseMusicbrainz', discogs: 'gsUseDiscogs',
+    jamendo: 'gsUseJamendo', audius: 'gsUseAudius', internetarchive: 'gsUseInternetArchive'
+  };
+  const fonti = Object.keys(mappaCheckbox).filter(fonte => {
+    const el = document.getElementById(mappaCheckbox[fonte]);
+    return el && el.checked;
+  });
+  window.api.setGensetFonti(fonti);
+}
+['gsUseDeezer','gsUseSpotify','gsUseLastfm','gsUseAppleMusic','gsUseMusicbrainz','gsUseDiscogs','gsUseJamendo','gsUseAudius','gsUseInternetArchive'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', salvaFontiGenSet);
+});
+
+document.getElementById('gsClose').addEventListener('click', () => {
+  document.getElementById('genSetView').classList.remove('open');
+});
+
+document.getElementById('btnGenerateSet').addEventListener('click', async () => {
+  const artisti = document.getElementById('gsArtisti').value.trim();
+  const generi = document.getElementById('gsGeneri').value.trim();
+  const annoDa = parseInt(document.getElementById('gsAnnoDa').value) || 2020;
+  const annoA = parseInt(document.getElementById('gsAnnoA').value) || new Date().getFullYear();
+  const targetType = document.getElementById('gsTargetType').value;
+  const targetValue = parseInt(document.getElementById('gsTargetValue').value) || 15;
+  const fonti = [];
+  if (document.getElementById('gsUseYoutube').checked) fonti.push('youtube');
+  if (document.getElementById('gsUseSoundcloud').checked) fonti.push('soundcloud');
+  if (document.getElementById('gsUseDeezer').checked) fonti.push('deezer');
+  if (document.getElementById('gsUseSpotify').checked) fonti.push('spotify');
+  if (document.getElementById('gsUseLastfm').checked) fonti.push('lastfm');
+  if (document.getElementById('gsUseAppleMusic').checked) fonti.push('applemusic');
+  if (document.getElementById('gsUseMusicbrainz').checked) fonti.push('musicbrainz');
+  if (document.getElementById('gsUseDiscogs').checked) fonti.push('discogs');
+  if (document.getElementById('gsUseJamendo').checked) fonti.push('jamendo');
+  if (document.getElementById('gsUseAudius').checked) fonti.push('audius');
+  if (document.getElementById('gsUseInternetArchive').checked) fonti.push('internetarchive');
+  const maxDurataMinInput = document.getElementById('gsMaxDurataBrano').value.trim();
+  const maxDurataBranoSec = maxDurataMinInput ? (parseInt(maxDurataMinInput) * 60) : null;
+
+  if (!artisti && !generi) {
+    document.getElementById('gsStatus').textContent = '⚠ Inserisci almeno un artista o un genere.';
+    return;
+  }
+  if (fonti.length === 0) {
+    document.getElementById('gsStatus').textContent = '⚠ Seleziona almeno una sorgente di ricerca.';
+    return;
+  }
+
+  const btn = document.getElementById('btnGenerateSet');
+  btn.disabled = true; btn.textContent = '⏳ Genero la scaletta...';
+  document.getElementById('gsStatus').textContent = 'Ricerca in corso, può richiedere qualche minuto...';
+
+  window.api.onGenerateSetProgress(({ count, durataTotale, title }) => {
+    const min = Math.floor(durataTotale / 60);
+    document.getElementById('gsStatus').textContent =
+      '🎵 ' + count + ' trovate (' + min + ' min) — ultima: ' + title;
+  });
+
+  const res = await window.api.generateSet({
+    artisti, generi, annoDa, annoA, targetType, targetValue,
+    destFolder: folder, fonti, maxDurataBranoSec
+  });
+
+  btn.disabled = false; btn.textContent = '🎛 Genera scaletta';
+
+  if (!res || !res.ok) {
+    document.getElementById('gsStatus').textContent = '❌ ' + (res?.error || 'Errore durante la generazione.');
+    return;
+  }
+  if (res.tracks.length === 0) {
+    document.getElementById('gsStatus').textContent = '⚠ Nessuna traccia trovata con questi filtri. Prova ad allargare il range di anni o gli artisti/generi.';
+    return;
+  }
+
+  // Trasforma i risultati nel formato usato dalla vista "Cerca da lista titoli"
+  // così riusiamo lo stesso player/rimozione tracce/download già pronti.
+  listaTrovati = res.tracks.map(t => ({
+    ok: true, source: t.source, id: t.id || null, url: t.url || null,
+    title: t.title, thumb: null, removed: false,
+    query: 'Genera Set'
+  }));
+
+  const minTot = Math.floor(res.durataTotaleSec / 60);
+  log('✔ Scaletta generata: ' + res.tracks.length + ' tracce (~' + minTot + ' min). Controlla la lista prima di scaricare.', 'ok');
+
+  document.getElementById('genSetView').classList.remove('open');
+  renderListResults();
+  updateListCount();
+  document.getElementById('lvStatus').textContent = res.tracks.length + ' tracce generate. Controlla la lista, elimina quello che non ti interessa, poi scarica.';
+  document.getElementById('listView').classList.add('open');
+});
+
+document.getElementById('btnClearMultiUrl').addEventListener('click', () => {
+  document.getElementById('multiUrlInput').value = '';
+  document.getElementById('muStatus').textContent = '';
+});
+
+document.getElementById('muDownloadBtn').addEventListener('click', async () => {
+  if (running) return;
+  const testo = document.getElementById('multiUrlInput').value;
+  const urls = testo.split('\n').map(u => u.trim()).filter(Boolean);
+  if (urls.length === 0) { log('⚠ Incolla almeno un link!', 'warn'); return; }
+
+  document.getElementById('multiUrlView').classList.remove('open');
+
+  // Cartella dedicata con data, come per le altre modalità multi-download
+  const muFolderName = safeFolderName('Link multipli') + ' (' + todayDateTimeStr() + ')';
+  const lastPart = baseFolder.replace(/\\+$/,'').split('\\').pop() || '';
+  if (lastPart.toLowerCase() !== muFolderName.toLowerCase()) {
+    folder = baseFolder.replace(/\\+$/,'') + '\\' + muFolderName;
+    setFolder(folder);
+  }
+
+  running = true;
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').style.display = '';
+  document.getElementById('btnOpenDir').style.display = 'none';
+  document.getElementById('progSec').classList.add('visible');
+  document.getElementById('progBar').style.width = '0%';
+  document.getElementById('progBar2').style.width = '0%';
+  document.getElementById('nowPlaying').classList.add('visible');
+  document.getElementById('npPulse').style.display = '';
+  setStatus('running', '⏳ Download in corso...');
+  clearLog();
+
+  const archiveFile = getArchiveFile();
+  log(`▶ Link multipli · ${urls.length} link · ${format.toUpperCase()}`, 'info');
+  log(`📁 ${folder}`, 'info');
+
+  window.api.removeAllListeners();
+
+  window.api.onNowPlaying(({videoId,title,index,thumb})=>{
+    document.getElementById('npTitle').textContent=title;
+    document.getElementById('npIndex').textContent=index?('#'+index):'';
+    if (thumb) { document.getElementById('npThumb').src=thumb; document.getElementById('npThumb').style.display=''; document.getElementById('npThumbPh').style.display='none'; }
+    else { document.getElementById('npThumb').style.display='none'; document.getElementById('npThumbPh').style.display=''; }
+  });
+
+  window.api.onLog(msg=>{
+    msg.split('\n').forEach(line=>{
+      if (!line.trim()) return;
+      let cls='l';
+      if (line.includes('ERROR')) cls+=' err';
+      else if (line.includes('WARNING')) cls+=' warn';
+      else if (line.includes('already been recorded')) return;
+      else if (line.includes('HTTP Error 403')) return;
+      else if (line.includes('[download]')||line.includes('[ExtractAudio]')||line.includes('Downloaded')) cls+=' dl';
+      else if (line.includes('[youtube')||line.includes('[info]')) cls+=' info';
+      log(line,null,cls);
+    });
+  });
+
+  window.api.onBlock(({start,total:tot})=>{
+    if (!start||!tot) return;
+    const pct=Math.round(start/tot*100);
+    document.getElementById('progBar').style.width=pct+'%';
+    document.getElementById('progBar2').style.width=pct+'%';
+    document.getElementById('progPct').textContent=pct+'%';
+    document.getElementById('progText').textContent='Link ' + start + ' di ' + tot;
+  });
+
+  window.api.onDone(({code})=>{
+    running=false;
+    document.getElementById('btnStart').disabled=false;
+    document.getElementById('btnStop').style.display='none';
+    document.getElementById('btnOpenDir').style.display='';
+    document.getElementById('progBar').style.width='100%';
+    document.getElementById('progBar2').style.width='100%';
+    document.getElementById('progPct').textContent='100%';
+    document.getElementById('npPulse').style.display='none';
+    if (code===0) { setStatus('done','✔ Completato!'); log('✔ File salvati in '+folder,'ok'); document.getElementById('npTitle').textContent='✔ Completato!'; }
+    else if (code===-1) { setStatus('err','⛔ Interrotto'); document.getElementById('npTitle').textContent='Interrotto'; }
+    else { setStatus('err','❌ Fallito'); document.getElementById('npTitle').textContent='Errore'; }
+  });
+
+  await window.api.startMultiUrlDownload({ urls, destFolder: folder, format, archiveFile, numeraFile: document.getElementById('chkNumeraFile').checked });
+});
+
+document.getElementById('btnOpenListView').addEventListener('click', () => {
+  document.getElementById('listView').classList.add('open');
+});
+document.getElementById('lvClose').addEventListener('click', () => {
+  document.getElementById('listView').classList.remove('open');
+  document.getElementById('lvPlayerThumb').innerHTML = '';
+  document.getElementById('lvPlayerBar').classList.remove('active');
+});
+
+document.getElementById('btnClearList').addEventListener('click', () => {
+  document.getElementById('listInput').value = '';
+  document.getElementById('listResults').innerHTML = '';
+  document.getElementById('lvStatus').textContent = '';
+  document.getElementById('lvCount').textContent = '';
+  document.getElementById('lvDownloadBtn').disabled = true;
+  listaTrovati = [];
+});
+
+function urlDaRisultato(r) {
+  if (r.url) return r.url;
+  if (r.source === 'youtube' && r.id) return 'https://www.youtube.com/watch?v=' + r.id;
+  return null;
+}
+
+function renderListResults() {
+  const box = document.getElementById('listResults');
+  box.innerHTML = '';
+  const icona = { youtube: '▶', soundcloud: '🟠', spotify: '🟢' };
+
+  listaTrovati.forEach((r, i) => {
+    if (!r) return;
+    const div = document.createElement('div');
+    div.className = 'lv-item' + (r.removed ? ' lv-removed' : '');
+
+    const thumbHtml = r.thumb
+      ? '<img class="lv-thumb" src="' + r.thumb + '">'
+      : '<div class="lv-thumb-ph">' + (r.ok ? (icona[r.source] || '🎵') : '✕') + '</div>';
+
+    const infoHtml = r.ok
+      ? '<div class="lv-info"><div class="lv-query">' + r.query + '</div><div class="lv-title">' + r.title + '</div></div>'
+      : '<div class="lv-info"><div class="lv-query" style="color:#f87171;">' + r.query + ' — non trovato</div></div>';
+
+    const sourceHtml = '<div class="lv-source">' + (r.ok ? (icona[r.source] || '') : '') + '</div>';
+
+    const url = urlDaRisultato(r);
+    const actionsHtml =
+      '<div class="lv-actions">' +
+        (r.ok && url ? '<button class="lv-action-btn lv-play" data-i="' + i + '" title="Ascolta">▶</button>' : '') +
+        (!r.removed ? '<button class="lv-action-btn lv-del" data-i="' + i + '" title="Rimuovi dalla lista">🗑</button>'
+                     : '<button class="lv-action-btn lv-undo" data-i="' + i + '" title="Ripristina">↩</button>') +
+      '</div>';
+
+    div.innerHTML = thumbHtml + infoHtml + sourceHtml + actionsHtml;
+    box.appendChild(div);
+  });
+
+  box.querySelectorAll('.lv-play').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = listaTrovati[+btn.dataset.i];
+      playInline(r);
+    });
+  });
+
+  box.querySelectorAll('.lv-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = +btn.dataset.i;
+      listaTrovati[idx].removed = true;
+      renderListResults();
+      updateListCount();
+    });
+  });
+  box.querySelectorAll('.lv-undo').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = +btn.dataset.i;
+      listaTrovati[idx].removed = false;
+      renderListResults();
+      updateListCount();
+    });
+  });
+}
+
+// Estrae ID YouTube da un URL
+function extractYouTubeId(url) {
+  const m = url.match(/(?:v=|youtu\.be\/|\/embed\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Riproduce inline (senza aprire il browser) usando un embed nascosto
+let lvCurrentPlayUrl = null;
+
+async function playInline(r) {
+  const bar = document.getElementById('lvPlayerBar');
+  const titleEl = document.getElementById('lvPlayerTitle');
+  const subEl = document.getElementById('lvPlayerSub');
+  const thumbEl = document.getElementById('lvPlayerThumb');
+
+  thumbEl.innerHTML = '';
+  titleEl.textContent = r.title || r.query;
+  subEl.textContent = '🔍 Cerco su SoundCloud lo stesso titolo...';
+  bar.classList.add('active');
+
+  // Titolo esatto da cercare: usa il titolo trovato, o la query originale come fallback
+  const titoloEsatto = r.title || r.query;
+
+  const res = await window.api.soundcloudSearchPlay(titoloEsatto);
+
+  if (res && res.ok && res.url) {
+    lvCurrentPlayUrl = res.url;
+    const embedUrl = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(res.url) +
+      '&auto_play=true&show_artwork=false&visual=true';
+
+    const iframe = document.createElement('iframe');
+    iframe.src = embedUrl;
+    iframe.allow = 'autoplay; encrypted-media; fullscreen';
+    iframe.setAttribute('allowfullscreen', 'true');
+    thumbEl.appendChild(iframe);
+
+    titleEl.textContent = res.title || titoloEsatto;
+    subEl.textContent = '🟠 SoundCloud — se non parte, clicca 🌐 per aprirlo nel browser';
+    return;
+  }
+
+  // SoundCloud non ha questo titolo esatto: torniamo automaticamente su
+  // YouTube con un piccolo player incorporato, invece di fermarci qui.
+  subEl.textContent = '🔍 Non su SoundCloud — provo su YouTube...';
+  const risultatoYt = await window.api.youtubeSearchPlay(titoloEsatto);
+
+  if (!risultatoYt || !risultatoYt.ok || !risultatoYt.id) {
+    subEl.textContent = '⚠ Non trovato né su SoundCloud né su YouTube. Prova 🌐 per aprire la fonte originale.';
+    lvCurrentPlayUrl = urlDaRisultato(r);
+    return;
+  }
+
+  lvCurrentPlayUrl = 'https://www.youtube.com/watch?v=' + risultatoYt.id;
+  const embedUrlYt = 'https://www.youtube.com/embed/' + risultatoYt.id + '?autoplay=1';
+
+  const iframeYt = document.createElement('iframe');
+  iframeYt.src = embedUrlYt;
+  iframeYt.allow = 'autoplay; encrypted-media; fullscreen';
+  iframeYt.setAttribute('allowfullscreen', 'true');
+  thumbEl.appendChild(iframeYt);
+
+  titleEl.textContent = risultatoYt.title || titoloEsatto;
+  subEl.textContent = '▶ YouTube — se non parte, clicca 🌐 per aprirlo nel browser';
+}
+
+document.getElementById('lvPlayerStop').addEventListener('click', () => {
+  document.getElementById('lvPlayerThumb').innerHTML = '';
+  document.getElementById('lvPlayerBar').classList.remove('active');
+});
+
+document.getElementById('lvPlayerOpenBrowser').addEventListener('click', () => {
+  if (!lvCurrentPlayUrl) return;
+  document.getElementById('lvPlayerThumb').innerHTML = '';
+  document.getElementById('lvPlayerBar').classList.remove('active');
+  document.getElementById('listView').classList.remove('open');
+  openBrowser();
+  bvWeb.loadURL(lvCurrentPlayUrl);
+});
+
+function updateListCount() {
+  const trovati = listaTrovati.filter(r => r && r.ok && !r.removed).length;
+  const totali = listaTrovati.filter(r => r && r.ok).length;
+  document.getElementById('lvCount').textContent = trovati + '/' + totali + ' selezionati';
+  document.getElementById('lvDownloadBtn').disabled = trovati === 0;
+}
+
+document.getElementById('btnSearchList').addEventListener('click', async () => {
+  const testo = document.getElementById('listInput').value;
+  const titoli = testo.split('\n').map(pulisciRigaLista).filter(Boolean);
+  if (titoli.length === 0) { log('⚠ Incolla prima i titoli!','warn'); return; }
+
+  const btn = document.getElementById('btnSearchList');
+  btn.disabled = true; btn.textContent = 'Ricerca...';
+  document.getElementById('lvDownloadBtn').disabled = true;
+  listaTrovati = [];
+  renderListResults();
+  document.getElementById('lvStatus').textContent = 'Cerco 0/' + titoli.length + '...';
+
+  window.api.onSearchProgress(({index,total,entry}) => {
+    listaTrovati[index] = entry;
+    document.getElementById('lvStatus').textContent = 'Cerco ' + (index+1) + '/' + total + '...';
+    renderListResults();
+    updateListCount();
+  });
+  window.api.onSearchProgressStatus(({index,label}) => {
+    document.getElementById('lvStatus').textContent = 'Titolo ' + (index+1) + ': ' + label;
+  });
+
+  const risultati = await window.api.searchTitles(titoli);
+  listaTrovati = risultati;
+  renderListResults();
+  updateListCount();
+
+  const trovati = listaTrovati.filter(r => r.ok).length;
+  document.getElementById('lvStatus').textContent = trovati + '/' + titoli.length + ' trovati. Controlla la lista, elimina quello che non ti interessa, poi scarica.';
+
+  btn.disabled = false; btn.textContent = '🔍 Cerca';
+
+  if (trovati === 0) {
+    log('⚠ Nessun brano trovato su nessuna piattaforma.', 'warn');
+  } else {
+    log('✔ ' + trovati + '/' + titoli.length + ' brani trovati. Controlla la lista prima di scaricare.', 'ok');
+  }
+});
+
+document.getElementById('lvDownloadBtn').addEventListener('click', async () => {
+  if (running) return;
+  const items = listaTrovati.filter(r => r && r.ok && !r.removed);
+  if (items.length === 0) return;
+
+  document.getElementById('lvPlayerThumb').innerHTML = '';
+  document.getElementById('lvPlayerBar').classList.remove('active');
+
+  // Chiediamo come chiamare la cartella, proponendo un nome già pronto
+  // (che l'utente può accettare così com'è o modificare a piacere).
+  // Usiamo un popup HTML nostro invece di window.prompt() perché quest'ultimo
+  // non è affidabile dentro Electron (spesso non mostra nulla).
+  const nomeSuggerito = extractedListTitle || 'Lista Titoli';
+  const nomeFinale = await chiediNomeCartella(nomeSuggerito);
+
+  document.getElementById('listView').classList.remove('open');
+
+  // Come per le playlist: crea una sottocartella con nome + data del download,
+  // così ogni lista scaricata resta separata e non si mischia con le altre.
+  const listFolderBase = safeFolderName(nomeFinale) + ' (' + todayDateTimeStr() + ')';
+  const lastPart = baseFolder.replace(/\\+$/,'').split('\\').pop() || '';
+  if (lastPart.toLowerCase() !== listFolderBase.toLowerCase()) {
+    folder = baseFolder.replace(/\\+$/,'') + '\\' + listFolderBase;
+    setFolder(folder);
+  }
+
+  running = true;
+  document.getElementById('lvDownloadBtn').disabled = true;
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').style.display = '';
+  document.getElementById('btnOpenDir').style.display = 'none';
+  document.getElementById('progSec').classList.add('visible');
+  document.getElementById('progBar').style.width = '0%';
+  document.getElementById('progBar2').style.width = '0%';
+  document.getElementById('nowPlaying').classList.add('visible');
+  document.getElementById('npPulse').style.display = '';
+  setStatus('running', '⏳ Download in corso...');
+  clearLog();
+
+  const archiveFile = getArchiveFile();
+  log('▶ Lista testo · ' + items.length + ' brani · ' + format.toUpperCase(), 'info');
+  log('📁 ' + folder, 'info');
+
+  window.api.removeAllListeners();
+
+  window.api.onNowPlaying(({videoId,title,index,thumb})=>{
+    document.getElementById('npTitle').textContent=title;
+    document.getElementById('npIndex').textContent=index?('#'+index):'';
+    if (thumb) { document.getElementById('npThumb').src=thumb; document.getElementById('npThumb').style.display=''; document.getElementById('npThumbPh').style.display='none'; }
+    else { document.getElementById('npThumb').style.display='none'; document.getElementById('npThumbPh').style.display=''; }
+  });
+
+  window.api.onLog(msg=>{
+    msg.split('\n').forEach(line=>{
+      if (!line.trim()) return;
+      let cls='l';
+      if (line.includes('ERROR')) cls+=' err';
+      else if (line.includes('WARNING')) cls+=' warn';
+      else if (line.includes('already been recorded')) return;
+      else if (line.includes('HTTP Error 403')) return;
+      else if (line.includes('[download]')||line.includes('[ExtractAudio]')||line.includes('Downloaded')) cls+=' dl';
+      else if (line.includes('[youtube')||line.includes('[info]')) cls+=' info';
+      log(line,null,cls);
+    });
+  });
+
+  window.api.onBlock(({start,total:tot})=>{
+    if (!start||!tot) return;
+    const pct=Math.round(start/tot*100);
+    document.getElementById('progBar').style.width=pct+'%';
+    document.getElementById('progBar2').style.width=pct+'%';
+    document.getElementById('progPct').textContent=pct+'%';
+    document.getElementById('progText').textContent='Brano ' + start + ' di ' + tot;
+  });
+
+  window.api.onDone(({code})=>{
+    running=false;
+    document.getElementById('lvDownloadBtn').disabled=false;
+    document.getElementById('btnStart').disabled=false;
+    document.getElementById('btnStop').style.display='none';
+    document.getElementById('btnOpenDir').style.display='';
+    document.getElementById('progBar').style.width='100%';
+    document.getElementById('progBar2').style.width='100%';
+    document.getElementById('progPct').textContent='100%';
+    document.getElementById('npPulse').style.display='none';
+    if (code===0) { setStatus('done','✔ Completato!'); log('✔ File salvati in '+folder,'ok'); document.getElementById('npTitle').textContent='✔ Completato!'; }
+    else if (code===-1) { setStatus('err','⛔ Interrotto'); document.getElementById('npTitle').textContent='Interrotto'; }
+    else { setStatus('err','❌ Fallito'); log('❌ Controlla il log sopra.','err'); document.getElementById('npTitle').textContent='Errore'; }
+  });
+
+  await window.api.startSearchDownload({ items, destFolder: folder, format, archiveFile, numeraFile: document.getElementById('chkNumeraFile').checked });
+});
+
+document.getElementById('btnStop').addEventListener('click', ()=>{
+  window.api.stopDownload();
+  document.getElementById('btnStop').style.display='none';
+  document.getElementById('npPulse').style.display='none';
+  document.getElementById('btnResume').disabled=false;
+  document.getElementById('btnReset').disabled=false;
+});
+
+document.getElementById('btnResume').addEventListener('click', async ()=>{
+  if (running) { log('⚠ Ferma prima!','warn'); return; }
+  const url=document.getElementById('urlInput').value.trim();
+  if (!url) { log('⚠ Incolla il link!','warn'); return; }
+  const btn=document.getElementById('btnResume');
+  btn.disabled=true; btn.textContent='⏳';
+  log('🔍 Ricostruzione archivio...','info');
+  const r=await window.api.rebuildArchive({destFolder:folder,archiveFile:getArchiveFile(),url});
+  btn.disabled=false; btn.textContent='📂 Riprendi';
+  if (r.ok) { log(`✔ ${r.count}/${r.total} già scaricati — ${r.total-r.count} mancanti.`,'ok'); }
+  else log('❌ Errore scansione.','err');
+});
+
+document.getElementById('btnReset').addEventListener('click', async ()=>{
+  if (running) { log('⚠ Ferma prima!','warn'); return; }
+  const ok=await window.api.deleteArchive(getArchiveFile());
+  log(ok?'🗑 Archivio azzerato — il prossimo download riparte dall\'inizio.':'ℹ Nessun archivio trovato.',ok?'warn':'info');
+});
+
+document.getElementById('btnOpenDir').addEventListener('click', ()=>window.api.openFolder(folder));
+
+function log(msg,type,customCls) {
+  const box=document.getElementById('logBox');
+  const d=document.createElement('div');
+  d.className=customCls||('l'+(type?' '+type:''));
+  d.textContent=msg; box.appendChild(d); box.scrollTop=box.scrollHeight;
+}
+function clearLog() { document.getElementById('logBox').innerHTML=''; }
+function setStatus(t,msg) { const el=document.getElementById('statusText'); el.className='status-text '+t; el.textContent=msg; }
+
+// ────────────────────────────────────────────────────────────
+//  BROWSER COMPLETO (YouTube · YT Music · SoundCloud · Spotify)
+// ────────────────────────────────────────────────────────────
+const bvView = document.getElementById('browserView');
+const bvWeb = document.getElementById('bvWebview');
+const bvUrl = document.getElementById('bvUrl');
+const bvDownload = document.getElementById('bvDownload');
+const bvExtract1001 = document.getElementById('bvExtract1001');
+const bvFormatSel = document.getElementById('bvFormat');
+const bvStatus = document.getElementById('bvStatus');
+const HOME_URL = 'https://www.youtube.com/';
+
+// Imposta il formato ovunque (browser + schermata principale in sync)
+function setFormat(f) {
+  format = f;
+  document.querySelectorAll('.fmt').forEach(x => x.classList.toggle('active', x.dataset.f === f));
+  if (bvFormatSel && bvFormatSel.value !== f) bvFormatSel.value = f;
+}
+
+let bvPoll = null;
+function openBrowser() {
+  bvView.classList.add('open');
+  if (!bvWeb.getAttribute('data-loaded')) {
+    bvWeb.setAttribute('data-loaded', '1');
+    try { bvWeb.loadURL(HOME_URL); } catch(e) {}
+  }
+  if (bvFormatSel) bvFormatSel.value = format;
+  if (bvPoll) clearInterval(bvPoll);
+  bvPoll = setInterval(bvUpdate, 1000); // i siti sono SPA: controllo l'URL di continuo
+}
+function closeBrowser() {
+  bvView.classList.remove('open');
+  if (bvPoll) { clearInterval(bvPoll); bvPoll = null; }
+}
+
+document.getElementById('btnOpenBrowser').addEventListener('click', openBrowser);
+document.getElementById('bvClose').addEventListener('click', closeBrowser);
+document.getElementById('bvBack').addEventListener('click', () => { try { if (bvWeb.canGoBack()) bvWeb.goBack(); } catch(e){} });
+document.getElementById('bvFwd').addEventListener('click', () => { try { if (bvWeb.canGoForward()) bvWeb.goForward(); } catch(e){} });
+document.getElementById('bvReload').addEventListener('click', () => { try { bvWeb.reload(); } catch(e){} });
+
+// Pulsanti rapidi piattaforme
+document.querySelectorAll('.bv-tab').forEach(b => b.addEventListener('click', () => {
+  try { bvWeb.loadURL(b.dataset.go); } catch(e){}
+}));
+
+// Formato dal browser
+if (bvFormatSel) bvFormatSel.addEventListener('change', () => setFormat(bvFormatSel.value));
+
+// Barra indirizzo scrivibile: INVIO = vai (URL) o cerca su YouTube (testo)
+bvUrl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  let v = bvUrl.value.trim();
+  if (!v) return;
+  let dest;
+  if (/^https?:\/\//i.test(v)) dest = v;
+  else if (/^[\w-]+(\.[\w-]+)+([\/?#].*)?$/.test(v)) dest = 'https://' + v; // sembra un dominio
+  else dest = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(v); // testo = ricerca
+  try { bvWeb.loadURL(dest); } catch(err){}
+});
+
+// Capisce se l'URL corrente è scaricabile e su che piattaforma
+function bvDownloadable(u) {
+  const s = String(u || '');
+  const p = (typeof detectUrlPlatform === 'function') ? detectUrlPlatform(s) : 'youtube';
+  if (p === 'soundcloud') return /soundcloud\.com\/[^\/]+\/[^\/?#]+/.test(s); // artista/traccia o /sets/
+  if (p === 'spotify')    return /open\.spotify\.com\/(intl-[a-z]+\/)?(track|playlist|album)\//.test(s);
+  return /[?&]list=/.test(s) || /[?&]v=/.test(s) || /youtu\.be\/[\w-]+/.test(s); // youtube
+}
+
+let bvUrlFocused = false;
+bvUrl.addEventListener('focus', () => bvUrlFocused = true);
+bvUrl.addEventListener('blur', () => bvUrlFocused = false);
+
+function bvUpdate() {
+  let u = '';
+  try { u = bvWeb.getURL(); } catch(e) {}
+  if (!bvUrlFocused) bvUrl.value = u; // non sovrascrivere mentre l'utente scrive
+  const ok = bvDownloadable(u);
+  bvDownload.disabled = !ok;
+  const p = (typeof detectUrlPlatform === 'function') ? detectUrlPlatform(u) : 'youtube';
+  if (ok) {
+    bvDownload.title = 'Scarica da ' + p;
+    bvStatus.textContent = 'Pronto a scaricare da ' + p.toUpperCase() + ' — scegli il formato e clicca «Scarica».';
+  } else {
+    bvDownload.title = 'Apri un brano, una playlist o un album';
+    bvStatus.textContent = 'Naviga e clicca «Scarica» quando sei su un brano, una playlist o un album.';
+  }
+
+  // Mostra il pulsante "Estrai tracklist" su pagine /tracklist/, sui risultati di ricerca
+  // 1001tracklists, e sulle pagine dei singoli mix di MixesDB.
+  const is1001Page = /1001tracklists\.com\/(tracklist\/|search\/result\.php)/.test(u);
+  const isMixesDbMixPage = /mixesdb\.com\/w\/(?!Main_Page|Category:|Special:|MixesDB:)/.test(u);
+  bvExtract1001.style.display = (is1001Page || isMixesDbMixPage) ? '' : 'none';
+  if (is1001Page) {
+    bvExtract1001.textContent = '🎛 Estrai tracce';
+    bvStatus.textContent = '🎛 Pagina 1001tracklists rilevata — clicca «Estrai tracce» per prendere tutte le tracce visibili.';
+  } else if (isMixesDbMixPage) {
+    bvExtract1001.textContent = '🎵 Estrai tracce';
+    bvStatus.textContent = '🎵 Pagina MixesDB rilevata — clicca «Estrai tracce» per prendere la tracklist di questo mix.';
+  }
+}
+bvWeb.addEventListener('did-navigate', bvUpdate);
+bvWeb.addEventListener('did-navigate-in-page', bvUpdate);
+bvWeb.addEventListener('page-title-updated', bvUpdate);
+bvWeb.addEventListener('did-finish-load', bvUpdate);
+bvWeb.addEventListener('dom-ready', () => { bvWeb.setAttribute('data-loaded', '1'); bvUpdate(); });
+bvWeb.addEventListener('did-fail-load', (e) => {
+  if (e.errorCode && e.errorCode !== -3) { // -3 = navigazione annullata (normale)
+    if (bvStatus) bvStatus.textContent = '⚠ Caricamento non riuscito ('+e.errorCode+'). Controlla la connessione o riprova ⟳.';
+  }
+});
+
+// CLICK "Scarica" — capisce piattaforma, prepara tutto e avvia
+// CLICK "Estrai tracklist" — legge il DOM già renderizzato della pagina 1001tracklists
+// che l'utente sta guardando nel browser incorporato (niente scraping HTML statico,
+// la pagina ha già eseguito tutto il suo JavaScript quindi è molto più affidabile)
+// Script iniettato nella pagina: estrae le tracce visibili + dice se c'e' una pagina successiva
+var EXTRACT_PAGE_SCRIPT = "(function() {" +
+  "var seen = new Set(); var tracks = [];" +
+  "function addTrack(raw) {" +
+    "var t = (raw || '').replace(/\\s+/g,' ').trim();" +
+    "if (t.length < 3) return;" +
+    "var key = t.toLowerCase();" +
+    "if (seen.has(key)) return;" +
+    "seen.add(key); tracks.push(t);" +
+  "}" +
+  "document.querySelectorAll('[data-trackvalue]').forEach(function(el){ addTrack(el.getAttribute('data-trackvalue')); });" +
+  "if (tracks.length === 0) { document.querySelectorAll('.trackValue').forEach(function(el){ addTrack(el.textContent); }); }" +
+  "if (tracks.length === 0) { document.querySelectorAll('.bTitle a.notranslate').forEach(function(el){ addTrack(el.textContent); }); }" +
+  "var pageTitle = document.title.replace(/\\s*[-|]\\s*1001Tracklists.*$/i, '').trim();" +
+  "var hasNext = false;" +
+  "document.querySelectorAll('.pagination li').forEach(function(li){" +
+    "var a = li.querySelector('a');" +
+    "if (a && a.textContent.trim() === 'Next' && !li.classList.contains('disabled')) { hasNext = true; }" +
+  "});" +
+  "return JSON.stringify({ tracks: tracks, pageTitle: pageTitle, url: window.location.href, hasNext: hasNext });" +
+"})();";
+
+// Script per cliccare "Next" e aspettare che la pagina si aggiorni
+var CLICK_NEXT_SCRIPT = "(function() {" +
+  "var lis = document.querySelectorAll('.pagination li');" +
+  "for (var i = 0; i < lis.length; i++) {" +
+    "var li = lis[i]; var a = li.querySelector('a');" +
+    "if (a && a.textContent.trim() === 'Next' && !li.classList.contains('disabled')) { li.click(); return true; }" +
+  "}" +
+  "return false;" +
+"})();";
+
+// Script di estrazione per MixesDB: trova l'intestazione "Tracklist" e legge
+// la lista numerata subito sotto. Formato tipico: "[00] Artista - Titolo (Remix) [Etichetta]"
+// — teniamo il nome del remix/versione tra parentesi tonde, tolto solo il timestamp
+// iniziale tra quadre e l'etichetta discografica finale tra quadre.
+var EXTRACT_MIXESDB_SCRIPT = "(function() {" +
+  "var heading = null;" +
+  "var headings = document.querySelectorAll('h2, h3, span.mw-headline');" +
+  "for (var i = 0; i < headings.length; i++) {" +
+    "if (headings[i].textContent.trim().toLowerCase() === 'tracklist') { heading = headings[i]; break; }" +
+  "}" +
+  "var container = heading ? (heading.closest('h2') || heading.closest('h3') || heading.parentElement) : null;" +
+  "var tracks = [];" +
+  "var seen = {};" +
+  "if (container) {" +
+    "var el = container.nextElementSibling;" +
+    "var testoTotale = '';" +
+    "var hops = 0;" +
+    "while (el && hops < 15) {" +
+      "var tag = el.tagName;" +
+      "if (tag === 'H2' || tag === 'H3') break;" +
+      "testoTotale += (el.innerText || el.textContent || '') + '\n';" +
+      "el = el.nextElementSibling;" +
+      "hops++;" +
+    "}" +
+    "var righe = testoTotale.split('\n');" +
+    "for (var j = 0; j < righe.length; j++) {" +
+      "var raw = righe[j].replace(/\s+/g,' ').trim();" +
+      "if (!raw) continue;" +
+      "var mNum = raw.match(/^\d{1,3}\.\s*(.+)$/);" +
+      "if (!mNum) continue;" +
+      "raw = mNum[1];" +
+      "raw = raw.replace(/^\[\d{1,3}(:\d{2})?\]\s*/, '');" +
+      "raw = raw.replace(/[\u2609\u2299\u25CE\u25B6]+\s*$/, '');" +
+      "raw = raw.trim();" +
+      "raw = raw.replace(/\s*\[[^\]]{1,40}\]\s*$/, '');" +
+      "raw = raw.trim();" +
+      "if (raw.length > 2 && !/^(unknown|id\??|\?\?\?)$/i.test(raw) && !/^id\s*-\s*id$/i.test(raw) && !seen[raw.toLowerCase()]) {" +
+        "seen[raw.toLowerCase()] = true; tracks.push(raw);" +
+      "}" +
+    "}" +
+  "}" +
+  "var pageTitle = document.title.replace(/\s*\|\s*DJ sets tracklists on MixesDB.*$/i, '').trim();" +
+  "return JSON.stringify({ tracks: tracks, pageTitle: pageTitle, hasNext: false });" +
+"})();";
+
+let extractedListTitle = ''; // nome del mix/lista estratta (1001tracklists, MixesDB o simili), usato per nominare la cartella di download
+
+bvExtract1001.addEventListener('click', async () => {
+  bvExtract1001.disabled = true;
+  const oldTxt = bvExtract1001.textContent;
+
+  const urlAttuale = bvWeb.getURL();
+  const isMixesDb = /mixesdb\.com/.test(urlAttuale);
+
+  try {
+    const allTracks = [];
+    const seenGlobal = new Set();
+    let pageTitle = '';
+    let pageNum = 1;
+    const MAX_PAGES = isMixesDb ? 1 : 20; // MixesDB: tracklist tutta su una pagina, niente paginazione
+
+    while (pageNum <= MAX_PAGES) {
+      bvExtract1001.textContent = isMixesDb ? '⏳ Estraggo...' : ('⏳ Pagina ' + pageNum + '...');
+
+      const scriptDaUsare = isMixesDb ? EXTRACT_MIXESDB_SCRIPT : EXTRACT_PAGE_SCRIPT;
+      const resultJson = await bvWeb.executeJavaScript(scriptDaUsare);
+      const result = JSON.parse(resultJson);
+      pageTitle = result.pageTitle || pageTitle;
+
+      let newCount = 0;
+      result.tracks.forEach(t => {
+        const key = t.toLowerCase();
+        if (!seenGlobal.has(key)) {
+          seenGlobal.add(key);
+          allTracks.push(t);
+          newCount++;
+        }
+      });
+
+      log('📄 ' + (isMixesDb ? 'MixesDB' : ('Pagina ' + pageNum)) + ': +' + newCount + ' tracce (totale ' + allTracks.length + ')', 'info');
+
+      if (!result.hasNext || newCount === 0) break;
+
+      const clicked = await bvWeb.executeJavaScript(CLICK_NEXT_SCRIPT);
+      if (!clicked) break;
+      await new Promise(r => setTimeout(r, 1800)); // aspetta il refresh dei risultati
+      pageNum++;
+    }
+
+    if (allTracks.length === 0) {
+      bvStatus.textContent = '⚠ Nessuna traccia trovata in questa pagina. Assicurati di essere sulla pagina di una tracklist compilata.';
+      log('⚠ Estrazione: nessuna traccia trovata nel DOM (' + (isMixesDb ? 'MixesDB' : '1001tracklists') + ').', 'warn');
+    } else {
+      const fonte = isMixesDb ? 'MixesDB' : ('1001tracklists (' + pageNum + ' pagina/e)');
+      log('✔ Estrazione completata: ' + allTracks.length + ' tracce totali da ' + fonte + ' — "' + pageTitle + '"', 'ok');
+      extractedListTitle = pageTitle;
+      const listInput = document.getElementById('listInput');
+      if (listInput) listInput.value = allTracks.join('\n');
+      bvStatus.textContent = '✔ ' + allTracks.length + ' tracce estratte da "' + pageTitle + '" — apri la lista per cercarle.';
+      document.getElementById('bvClose').click();
+      document.getElementById('listView').classList.add('open');
+    }
+  } catch(e) {
+    bvStatus.textContent = "⚠ Errore durante l'estrazione: " + e.message;
+    log('❌ Errore estrazione: ' + e.message, 'err');
+  }
+
+  bvExtract1001.disabled = false;
+  bvExtract1001.textContent = oldTxt;
+});
+
+bvDownload.addEventListener('click', async () => {
+  if (running) { log('⚠ C\'è già un download in corso.','warn'); return; }
+  let u = '';
+  try { u = bvWeb.getURL(); } catch(e) {}
+  if (!bvDownloadable(u)) return;
+
+  bvDownload.disabled = true;
+  const oldTxt = bvDownload.textContent;
+  bvDownload.textContent = '⏳ Preparo...';
+
+  const platform = (typeof detectUrlPlatform === 'function') ? detectUrlPlatform(u) : 'youtube';
+
+  // Per YouTube esporto i cookie (login + verifica età pronti)
+  if (platform === 'youtube') {
+    try {
+      const r = await window.ytLogin.syncCookies();
+      if (r && r.ok) log(`🍪 Login sincronizzato (${r.count} cookie).`, 'ok');
+    } catch(e) {}
+  }
+
+  // Formato scelto nel browser
+  if (bvFormatSel) setFormat(bvFormatSel.value);
+
+  // Passo l'URL al flusso principale
+  const input = document.getElementById('urlInput');
+  input.value = u;
+  if (typeof updateUrlTypeUI === 'function') updateUrlTypeUI(u);
+
+  bvDownload.textContent = oldTxt;
+  closeBrowser();
+
+  // Il link è già stato analizzato correttamente da updateUrlTypeUI (rileva da solo
+  // se è un video singolo, anche con "radio automatica" tipo start_radio=1&list=RD...,
+  // o una vera playlist). NON avviamo più nulla in automatico: è l'utente a scegliere
+  // se cliccare "Info" (per le playlist) oppure "Avvia" direttamente, esattamente come
+  // quando incolla un link a mano nella schermata principale.
+  const platformLabel = platform === 'youtube' ? (detectedSingle ? 'video singolo' : 'playlist YouTube') : platform;
+  log('🎵 Link preso dal browser (' + platformLabel + '). Scegli tu se recuperare le info o avviare direttamente.', 'info');
+});
+
+// ── Popup "Cartella predefinita?" ──
+// Agganciati dentro DOMContentLoaded perché l'HTML del modal è più in basso
+// nel documento (dopo questo script) e non esisterebbe ancora se eseguito subito.
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('folderModalDefault').addEventListener('click', async () => {
+    await window.api.setDefaultFolder(pendingFolderChoice);
+    document.getElementById('folderModal').style.display = 'none';
+  });
+  document.getElementById('folderModalOnce').addEventListener('click', () => {
+    document.getElementById('folderModal').style.display = 'none';
+  });
+});
+
+// Al primo avvio: carica la cartella predefinita salvata, se esiste
+window.addEventListener('DOMContentLoaded', async () => {
+  const saved = await window.api.getDefaultFolder();
+  if (saved) {
+    baseFolder = saved;
+    refreshFolder();
+  }
+});
+
+</script>
+
+<!-- MODAL: cartella predefinita o solo per questa volta -->
+<div id="folderModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;">
+  <div style="background:#16162e;border:1px solid #2a2a4a;border-radius:14px;padding:22px 26px;max-width:380px;width:90%;">
+    <div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:8px;">📁 Cartella di download</div>
+    <div style="font-size:12px;color:#fff;margin-bottom:6px;">Hai scelto:</div>
+    <div id="folderModalPath" style="font-size:12px;color:#a78bfa;background:#0a0a18;border:1px solid #2a2a4a;border-radius:7px;padding:8px 10px;margin-bottom:16px;word-break:break-all;"></div>
+    <div style="font-size:12px;color:#fff;margin-bottom:14px;">Vuoi usarla sempre come predefinita, oppure solo per questa volta?</div>
+    <div style="display:flex;gap:8px;">
+      <button id="folderModalOnce" class="btn btn-secondary" style="flex:1;">Solo questa volta</button>
+      <button id="folderModalDefault" class="btn btn-primary" style="flex:1;">✔ Sempre (predefinita)</button>
+    </div>
+  </div>
+</div>
+
+<!-- Popup per chiedere il nome della cartella (sostituisce window.prompt, non affidabile in Electron) -->
+<div id="nomeCartellaModal" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.55);align-items:center;justify-content:center;">
+  <div style="background:#16162e;border:1px solid #2a2a4a;border-radius:14px;padding:22px 26px;max-width:420px;width:90%;">
+    <div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:10px;">📁 Come vuoi chiamare la cartella?</div>
+    <input type="text" id="nomeCartellaInput" style="width:100%;background:#0a0a18;border:1px solid #2a2a4a;border-radius:8px;color:#fff;padding:10px 12px;font-size:13px;box-sizing:border-box;margin-bottom:16px;">
+    <div style="display:flex;gap:8px;">
+      <button id="nomeCartellaAnnulla" class="btn btn-secondary" style="flex:1;">Usa suggerito</button>
+      <button id="nomeCartellaConferma" class="btn btn-primary" style="flex:1;">✔ Conferma</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
