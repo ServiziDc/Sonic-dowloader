@@ -1,0 +1,5 @@
+node_modules/
+dist/
+tools/*.exe
+*.log
+CONFIGURA_SECRETS.bat
